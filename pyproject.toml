@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "filepilot"
+version = "0.1.0"
+description = "FilePilot: organizador de arquivos para Windows"
+requires-python = ">=3.12"
+dependencies = [
+    "PySide6==6.12.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.1.1",
+    "pytest-qt==4.5.0",
+    "pyinstaller==6.22.3",
+    "mypy==2.4.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["filepilot*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
