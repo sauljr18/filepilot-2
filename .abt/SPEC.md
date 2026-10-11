@@ -797,3 +797,7 @@ Nenhuma pendencia aberta nesta secao.
 | - | 17.2 versao `mypy==2.4.0` | - | `[DECISAO: a versao 2.4.0 e a mais recente publicada no PyPI em 2026-10-11; a pessoa nao indicou versao]` |
 | - | 17.2 comando `python -m mypy --platform win32 filepilot` com configuracao padrao | - | `[DECISAO: o pacote filepilot e o unico codigo do produto (3.1); a pessoa nao pediu configuracao estrita nem arquivo de configuracao proprio, entao vale a configuracao padrao do mypy]` e `[DECISAO: aprovada no enriquecimento; sugestao 1]` |
 | - | 17.3 Python de 64 bits no ambiente de build e de testes no Windows | - | `[DECISAO: o runner windows-latest do GitHub Actions (4) e de 64 bits; a decisao de plataforma vale tambem para o ambiente de build]` |
+
+## §18 Fundacao: projeto, dominio, banco e CI Windows
+
+Item: filepilot-v1-1 (filepilot-2)
