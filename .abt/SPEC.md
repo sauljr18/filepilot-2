@@ -743,3 +743,57 @@ Pasta `C:\Users\Ana\Downloads` com `fatura.pdf`, `foto.JPG`, `setup.exe` e `fatu
 | `rules.destination_folder` | `Rule.destination_folder` | campo "Subpasta de destino" | Sim |
 | `rules.position` | `Rule.position` | coluna "Prioridade" | Sim |
 | `rule_extensions.extension` | `Rule.extensions` | campo "Extensões" | Sim |
+
+## 17. Ferramentas de desenvolvimento e plataforma alvo [DELTA 2026-10-11, mypy e Windows 10 e 11 em 64 bits]
+
+### 17.1 Objetivo e fora de escopo
+
+Esta secao registra duas decisoes da especificacao, vindas de `.abt/product-spec/20261011-231916/discovery-notes.md`:
+
+1. A checagem de tipos com mypy faz parte das ferramentas de desenvolvimento, junto com pytest.
+2. A plataforma alvo do FilePilot e Windows 10 e 11 em 64 bits.
+
+Fora de escopo desta secao: mudar codigo do produto (ainda nao existe codigo no repositorio); anotar tipos no codigo existente; macOS e Linux como plataforma alvo (continuam fora de escopo, como em 1.2); reabrir PRD ou stack. Nenhum dado, servico ou tela muda: o modelo de dados (5), os contratos (6) e os componentes (7) ficam como estao.
+
+### 17.2 Ferramentas de desenvolvimento: mypy
+
+Acrescenta uma linha a tabela de 4. Nao altera as linhas existentes:
+
+| Camada | Tecnologia | Versao | Razao |
+|---|---|---|---|
+| Checagem de tipos | mypy | 2.4.0 | Verifica as anotacoes de tipo do pacote `filepilot` junto com os testes do pytest `[DECISAO: a versao 2.4.0 e a mais recente publicada no PyPI em 2026-10-11; a pessoa nao indicou versao]` |
+
+Complementa o ultimo paragrafo de 4 sobre o manifesto: `pyproject.toml` declara `mypy==2.4.0` entre as dependencias de desenvolvimento, ao lado de `pytest==9.1.1`, `pytest-qt==4.5.0` e `pyinstaller==6.22.3`. Dependencias novas desta secao: so `mypy==2.4.0`.
+
+Comando de checagem: `python -m mypy --platform win32 filepilot`, executado na raiz do repositorio, com saida que comeca por `Success: no issues found` (a linha completa traz a contagem de arquivos analisados) e codigo de saida 0 `[DECISAO: o pacote filepilot e o unico codigo do produto (3.1); a pessoa nao pediu configuracao estrita nem arquivo de configuracao proprio, entao vale a configuracao padrao do mypy]`. A opcao `--platform win32` faz o mypy analisar o codigo para a plataforma alvo de 17.3, mesmo quando a checagem roda em Linux; sem ela, `ctypes.windll` (6.1) e `st_file_attributes` (6.1 e 6.7) seriam apontados como erro fora do Windows `[DECISAO: aprovada no enriquecimento; sugestao 1]`.
+
+Escopo negativo: esta secao NAO cria o arquivo de configuracao do mypy; NAO acrescenta mypy ao fluxo do GitHub Actions; NAO exige anotacao de tipos alem da que as demais secoes ja usam. A checagem e um comando manual de desenvolvimento.
+
+Rodar mypy em Linux e permitido, como o pytest (13), sempre com `--platform win32`.
+
+### 17.3 Plataforma alvo
+
+Decisao da especificacao: a plataforma alvo do FilePilot e Windows 10 e 11 em 64 bits. Isto formaliza a frase de 13 ("Sistema operacional alvo: Windows 10 e 11 em 64 bits") como decisao e a mantem como esta; nada em 13 e editado.
+
+O que a decisao fixa:
+
+- O executavel gerado com PyInstaller (4) e entregue para Windows 10 e 11 em 64 bits e nao e entregue para outra plataforma.
+- O Python do ambiente de build e dos testes no Windows e a distribuicao de 64 bits da versao 3.12 `[DECISAO: o runner windows-latest do GitHub Actions (4) e de 64 bits; a decisao de plataforma vale tambem para o ambiente de build]`.
+- Versoes de 32 bits do Windows e outras versoes do Windows nao sao alvo e nao ganham teste.
+- Linux continua so como ambiente de desenvolvimento e de testes (13), nunca como plataforma alvo.
+
+Escopo negativo: esta secao NAO cria teste que verifique a arquitetura do sistema em execucao; NAO muda `requires-python` (4).
+
+### 17.4 Pendencias para decisao
+
+Nenhuma pendencia aberta nesta secao.
+
+### 17.5 Traceability Matrix
+
+| Item do escopo | Elementos da SPEC | Status | Origem |
+|---|---|---|---|
+| mypy faz parte das ferramentas de desenvolvimento, junto com pytest | 17.2; complementa 4 | coberto | discovery-notes.md |
+| Plataforma alvo: Windows 10 e 11 em 64 bits, como decisao | 17.3; formaliza 13 | coberto | discovery-notes.md |
+| - | 17.2 versao `mypy==2.4.0` | - | `[DECISAO: a versao 2.4.0 e a mais recente publicada no PyPI em 2026-10-11; a pessoa nao indicou versao]` |
+| - | 17.2 comando `python -m mypy --platform win32 filepilot` com configuracao padrao | - | `[DECISAO: o pacote filepilot e o unico codigo do produto (3.1); a pessoa nao pediu configuracao estrita nem arquivo de configuracao proprio, entao vale a configuracao padrao do mypy]` e `[DECISAO: aprovada no enriquecimento; sugestao 1]` |
+| - | 17.3 Python de 64 bits no ambiente de build e de testes no Windows | - | `[DECISAO: o runner windows-latest do GitHub Actions (4) e de 64 bits; a decisao de plataforma vale tambem para o ambiente de build]` |
