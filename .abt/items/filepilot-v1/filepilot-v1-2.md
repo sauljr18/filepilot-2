@@ -5,7 +5,30 @@ Epico: filepilot-v1 | Ordem: 2 | Pontos: 4 | Depende de: filepilot-v1-1
 scan_folder lista os arquivos elegiveis do nivel da pasta escolhida e recusa pasta invalida, ilegivel, vazia, protegida ou de rede com o codigo de erro certo.
 
 ## Contexto herdado
--
+Entregue por filepilot-v1-1 (commit 940e833). Nao reimplementar: pyproject.toml, pacotes `filepilot.domain` e `filepilot.db`, migracao 0001_initial e o workflow de testes.
+
+Artefatos criados:
+- pyproject.toml - manifesto - setuptools; `requires-python >=3.12`; `PySide6==6.12.0`; extras `dev` com pytest, pytest-qt, pyinstaller e `mypy==2.4.0`; `testpaths = ["tests"]`
+- filepilot/__init__.py - pacote - `__version__ = "0.1.0"`
+- filepilot/domain/categories.py - constantes - `CategoryDef(folder, extensions)` e `CATEGORIES: dict[str, CategoryDef]` (documentos, imagens, videos, compactados)
+- filepilot/domain/models.py - dataclasses - `ScannedFile(path, name, extension, size_bytes)`, `Rule`, `PlannedOperation`, `Plan` (com `is_empty`), `OrganizationResult`
+- filepilot/domain/errors.py - excecao - `FilePilotError(code, message, fields=None)` com atributos `code`, `message` e `fields`
+- filepilot/db/connection.py - servico - `open_connection(db_path: Path) -> sqlite3.Connection`
+- filepilot/db/migrations.py - servico - `apply_migrations(conn)` e a lista `MIGRATIONS` com a 0001_initial
+- .github/workflows/tests.yml - CI - roda `pytest` e `mypy . --no-error-summary` no windows-latest
+
+Contratos:
+- `ScannedFile` (filepilot/domain/models.py): `path: Path`, `name: str`, `extension: str` (minusculas, sem ponto, `""` se nao houver), `size_bytes: int`; dataclass imutavel (`frozen=True`). Armadilha: `scan_folder` precisa preencher `extension` ja normalizada.
+- `FilePilotError` (filepilot/domain/errors.py): `FilePilotError(code: str, message: str, fields: dict[str, str] | None = None)`; `message` e o texto da interface de 6; use os codigos de 6 (`PASTA_INVALIDA`, `PASTA_PROTEGIDA`, `PASTA_ILEGIVEL`, `PASTA_VAZIA`).
+
+Nomes decididos:
+- Os testes ficam em `tests/<pacote>/test_<modulo>.py` e cada pasta de teste tem `__init__.py`.
+- `CATEGORIES` guarda a subpasta em `CategoryDef.folder` (nao `subfolder`).
+
+Padroes estabelecidos:
+- Testes de caminho usam `tmp_path` do pytest e anotam `-> None`.
+- Todo codigo novo passa em `mypy . --no-error-summary` (configuracao padrao, sem arquivo de configuracao proprio).
+- Nenhum caractere Unicode de traco ou aspas tipograficas no codigo de `filepilot` (grep do gate).
 
 ## Features
 
