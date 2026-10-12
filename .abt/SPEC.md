@@ -1058,3 +1058,7 @@ Item: filepilot-fix-2 (filepilot-2)
 ## §31 Ordem estavel da lista de arquivos com nomes que so diferem por maiuscula
 
 Item: filepilot-fix-3 (filepilot-2)
+
+## §32 Organizacao interrompida e recuperacao ao abrir o banco
+
+Item: filepilot-fix-4 (filepilot-2)
