@@ -1,6 +1,7 @@
 """Janela principal do FilePilot (SPEC 7.1)."""
 
 import sqlite3
+from functools import partial
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -9,6 +10,7 @@ from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import QMainWindow, QMessageBox, QTabWidget, QWidget
 
 from filepilot.db.connection import open_connection
+from filepilot.ui.history_tab import HistoryTab
 from filepilot.ui.organize_tab import OrganizeTab
 from filepilot.ui.rules_tab import RulesTab
 
@@ -26,26 +28,18 @@ class Reloadable(Protocol):
     def reload(self) -> None: ...
 
 
-class PlaceholderTab(QWidget):
-    """Marcador de posicao: os itens seguintes trocam cada um pela aba real."""
-
-    def reload(self) -> None:
-        """Sem dados a recarregar."""
-
-
 def build_tabs(
     conn: sqlite3.Connection, db_path: Path | None = None
 ) -> list[tuple[str, QWidget]]:
     """Cria as abas na ordem Organizar, Histórico e Regras.
 
-    As abas Organizar e Regras sao reais e recebem a mesma conexao da janela; a
-    Organizar recebe tambem o `db_path`, para o worker abrir a propria conexao;
-    o item filepilot-v1-11 troca o marcador de Histórico pela aba real.
+    As tres abas sao reais e recebem a mesma conexao da janela; a Organizar
+    recebe tambem o `db_path`, para o worker abrir a propria conexao.
     """
     organize, history, rules = TAB_TITLES
     return [
         (organize, OrganizeTab(conn, db_path)),
-        (history, PlaceholderTab()),
+        (history, HistoryTab(conn)),
         (rules, RulesTab(conn)),
     ]
 
@@ -62,15 +56,28 @@ class MainWindow(QMainWindow):
         self.conn = open_connection(db_path)
         self.setWindowTitle(WINDOW_TITLE)
         self.tabs = QTabWidget()
+        organize_tab: OrganizeTab | None = None
+        history_tab: HistoryTab | None = None
         for title, tab in build_tabs(self.conn, db_path):
             self.tabs.addTab(tab, title)
             if isinstance(tab, OrganizeTab):
+                organize_tab = tab
                 tab.organizing_changed.connect(self._set_organizing)
+            elif isinstance(tab, HistoryTab):
+                history_tab = tab
+        if organize_tab is not None and history_tab is not None:
+            organize_tab.organization_finished.connect(history_tab.on_organization_finished)
+            organize_tab.details_requested.connect(partial(self._open_history, history_tab))
         self.tabs.currentChanged.connect(self._on_tab_changed)
         self.setCentralWidget(self.tabs)
 
     def _set_organizing(self, organizing: bool) -> None:
         self.organizing = organizing
+
+    def _open_history(self, history_tab: HistoryTab, organization_id: int) -> None:
+        """Abre a aba Histórico na organizacao pedida ("Ver detalhes", 7.2)."""
+        self.tabs.setCurrentWidget(history_tab)
+        history_tab.show_organization(organization_id)
 
     def _on_tab_changed(self, index: int) -> None:
         if index not in _RELOAD_ON_FOCUS:

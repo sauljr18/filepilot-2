@@ -1,9 +1,10 @@
-"""Aba Organizar: escolha da pasta, lista, simulacao e organizacao com progresso (SPEC 7.2)."""
+"""Aba Organizar: pasta, lista, simulacao, organizacao com progresso e desfazer (SPEC 7.2)."""
 
 import sqlite3
 from pathlib import Path
 
 from PySide6.QtCore import QCoreApplication, QThread, Signal
+from PySide6.QtGui import QShowEvent
 from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
@@ -18,11 +19,13 @@ from PySide6.QtWidgets import (
 
 from filepilot.domain.errors import FilePilotError
 from filepilot.domain.models import OrganizationResult, Plan, ScannedFile
+from filepilot.services.history import OrganizationRow, last_undoable
 from filepilot.services.planner import build_plan
 from filepilot.services.rules import list_rules
 from filepilot.services.scanner import scan_folder
+from filepilot.services.undo import UndoResult
 from filepilot.ui.file_table import FileTableView
-from filepilot.ui.organize_worker import OrganizeWorker, run_in_thread
+from filepilot.ui.organize_worker import OrganizeWorker, UndoWorker, run_in_thread
 
 MODE_EMPTY = "vazio"
 MODE_LOADING = "carregando"
@@ -72,7 +75,10 @@ class OrganizeTab(QWidget):
     """
 
     organization_finished = Signal(int)
-    # Verdadeiro enquanto a organizacao roda; a janela o espelha em `organizing`.
+    # "Ver detalhes": pede a janela que abra o Historico nesta organizacao.
+    details_requested = Signal(int)
+    # Verdadeiro enquanto a organizacao ou o desfazer rodam; a janela o espelha em
+    # `organizing`, que tambem impede fechar a janela com a thread viva.
     organizing_changed = Signal(bool)
 
     def __init__(self, conn: sqlite3.Connection, db_path: Path | None = None) -> None:
@@ -83,9 +89,14 @@ class OrganizeTab(QWidget):
         self.files: list[ScannedFile] = []
         self.plan: Plan | None = None
         self.mode = MODE_EMPTY
+        self._last_organization_id: int | None = None
+        # Ultima organizacao desfazivel (6.4); `None` desabilita "Desfazer".
+        self._undoable: OrganizationRow | None = None
+        self._undoing = False
+        self._undo_folder: Path | None = None
         self._thread: QThread | None = None
         # O Python apaga o worker se ninguem guardar a referencia enquanto ele roda.
-        self._worker: OrganizeWorker | None = None
+        self._worker: OrganizeWorker | UndoWorker | None = None
 
         self.folder_edit = QLineEdit()
         self.folder_edit.setReadOnly(True)
@@ -94,17 +105,23 @@ class OrganizeTab(QWidget):
         self.table = FileTableView()
         self.simulate_button = QPushButton("Simular")
         self.organize_button = QPushButton("Organizar")
+        self.undo_button = QPushButton("Desfazer última organização")
         self.progress = QProgressBar()
         self.progress.setFormat(_PROGRESS_FORMAT)
         self.progress.setVisible(False)
         self.summary = QLabel()
+        self.details_button = QPushButton("Ver detalhes")
+        self.details_button.setVisible(False)
         self._build_layout()
 
         self.choose_button.clicked.connect(self.choose_folder)
         self.refresh_button.clicked.connect(self.refresh)
         self.simulate_button.clicked.connect(self.simulate)
         self.organize_button.clicked.connect(self.organize)
+        self.undo_button.clicked.connect(self.undo)
+        self.details_button.clicked.connect(self._on_details_clicked)
         self._show_empty()
+        self.refresh_undo()
 
     def _build_layout(self) -> None:
         folder_bar = QHBoxLayout()
@@ -114,13 +131,18 @@ class OrganizeTab(QWidget):
         action_bar = QHBoxLayout()
         action_bar.addWidget(self.simulate_button)
         action_bar.addWidget(self.organize_button)
+        action_bar.addWidget(self.undo_button)
         action_bar.addStretch(1)
+        summary_bar = QHBoxLayout()
+        summary_bar.addWidget(self.summary)
+        summary_bar.addWidget(self.details_button)
+        summary_bar.addStretch(1)
         layout = QVBoxLayout(self)
         layout.addLayout(folder_bar)
         layout.addWidget(self.table, 1)
         layout.addLayout(action_bar)
         layout.addWidget(self.progress)
-        layout.addWidget(self.summary)
+        layout.addLayout(summary_bar)
 
     # -- estados ---------------------------------------------------------
 
@@ -129,12 +151,30 @@ class OrganizeTab(QWidget):
         self._update_buttons()
 
     def _update_buttons(self) -> None:
-        actionable = self.mode in _ACTIONABLE
+        busy = self.mode in _BUSY or self._undoing
+        actionable = self.mode in _ACTIONABLE and not self._undoing
         has_operations = self.plan is not None and not self.plan.is_empty
-        self.choose_button.setEnabled(self.mode not in _BUSY)
-        self.refresh_button.setEnabled(self.folder is not None and self.mode not in _BUSY)
+        self.choose_button.setEnabled(not busy)
+        self.refresh_button.setEnabled(self.folder is not None and not busy)
         self.simulate_button.setEnabled(actionable)
         self.organize_button.setEnabled(actionable and has_operations)
+        self.undo_button.setEnabled(
+            self._undoable is not None and self.mode != MODE_ORGANIZING and not self._undoing
+        )
+
+    def refresh_undo(self) -> None:
+        """Reavalia `last_undoable` e habilita ou desabilita "Desfazer" (7.2)."""
+        try:
+            self._undoable = last_undoable(self._conn)
+        except FilePilotError:
+            # Sem historico legivel nao ha o que desfazer; a aba Historico mostra o erro.
+            self._undoable = None
+        self._update_buttons()
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802 - nome do Qt
+        """Ao abrir a aba, reavalia o botao Desfazer."""
+        super().showEvent(event)
+        self.refresh_undo()
 
     def _show_empty(self) -> None:
         self.table.set_rows([], None)
@@ -209,6 +249,7 @@ class OrganizeTab(QWidget):
         if self.folder is None:
             return
         self.progress.setVisible(False)
+        self.details_button.setVisible(False)
         if self._read_folder(self.folder) is not None:
             self._show_listed()
 
@@ -226,6 +267,7 @@ class OrganizeTab(QWidget):
         if self.folder is None:
             return
         self.progress.setVisible(False)
+        self.details_button.setVisible(False)
         previous_mode = self.mode
         shown = _signature(self.plan)
         plan = self._read_folder(self.folder)
@@ -283,12 +325,66 @@ class OrganizeTab(QWidget):
             self.summary.setText(
                 f"Concluído: {result.moved_count} movidos, {result.failed_count} falhas."
             )
+        self._last_organization_id = result.organization_id
+        self.details_button.setVisible(result.failed_count > 0)
+        self.refresh_undo()
         self.organizing_changed.emit(False)
         self.organization_finished.emit(result.organization_id)
+
+    def _on_details_clicked(self) -> None:
+        if self._last_organization_id is not None:
+            self.details_requested.emit(self._last_organization_id)
 
     def _on_failed(self, code: str, message: str) -> None:
         """Mostra o erro de contrato ou o inesperado e deixa a janela aberta."""
         self._release_worker()
         self.organizing_changed.emit(False)
         self._show_error(FilePilotError(code, message))
+        # Uma organizacao interrompida ja pode ser desfeita.
+        self.refresh_undo()
         QMessageBox.critical(self, _ERROR_TITLE, message)
+
+    # -- desfazer --------------------------------------------------------
+
+    def undo(self) -> None:
+        """Desfaz a ultima organizacao em uma `QThread`, sem pedir confirmacao."""
+        undoable = self._undoable
+        if undoable is None or self._undoing or self.mode == MODE_ORGANIZING:
+            return
+        if self._db_path is None:
+            self.summary.setText(_DATABASE_UNAVAILABLE)
+            return
+        worker = UndoWorker(self._db_path)
+        worker.finished.connect(self._on_undone)
+        worker.failed.connect(self._on_undo_failed)
+        self._undo_folder = Path(undoable.folder_path)
+        self._undoing = True
+        self._update_buttons()
+        self.organizing_changed.emit(True)
+        self._worker = worker
+        self._thread = run_in_thread(worker)
+
+    def _on_undone(self, result: UndoResult) -> None:
+        """Mostra o resumo, relê a pasta se era a atual e reavalia o botao."""
+        self._release_worker()
+        self._undoing = False
+        message = f"Desfeito: {result.restored_count} arquivos restaurados."
+        if result.not_restored:
+            paths = ", ".join(path for path, _ in result.not_restored)
+            message = f"{message} Não restaurados: {paths}"
+        if self.folder is not None and self._undo_folder == self.folder:
+            if self._read_folder(self.folder, empty_ok=True) is not None:
+                self._show_listed()
+                self.summary.setText(message)
+        else:
+            self.summary.setText(message)
+        self.refresh_undo()
+        self.organizing_changed.emit(False)
+
+    def _on_undo_failed(self, code: str, message: str) -> None:
+        """Mostra a mensagem do erro de contrato no resumo e reavalia o botao."""
+        self._release_worker()
+        self._undoing = False
+        self.summary.setText(message)
+        self.refresh_undo()
+        self.organizing_changed.emit(False)
