@@ -33,6 +33,9 @@ _LOADING = "Lendo a pasta..."
 _NO_OPERATIONS = "Não há operações para executar."
 _FILE_DIALOG_TITLE = "Escolher pasta"
 _NOT_CHANGED = "Nenhum arquivo foi alterado."
+# Texto de PASTA_ILEGIVEL (SPEC 6); repetido aqui porque a ui nao importa o
+# dicionario privado do scanner. Um teste compara os dois.
+_UNREADABLE = "Não foi possível ler a pasta escolhida."
 
 # Estados em que ha uma lista valida na tabela e a pessoa pode agir sobre ela.
 _ACTIONABLE = (MODE_LISTED, MODE_SIMULATED)
@@ -135,6 +138,10 @@ class OrganizeTab(QWidget):
             plan = build_plan(folder, files, list_rules(self._conn))
         except FilePilotError as error:
             self._show_error(error)
+            return None
+        except OSError:
+            # O texto bruto da excecao fica so na cadeia de excecoes.
+            self._show_error(FilePilotError("PASTA_ILEGIVEL", _UNREADABLE))
             return None
         self.files = files
         self.plan = plan
