@@ -1066,3 +1066,7 @@ Item: filepilot-fix-4 (filepilot-2)
 ## §33 Historico e desfazer a ultima organizacao
 
 Item: filepilot-v1-7 (filepilot-2)
+
+## §34 Janela principal, abas e instancia unica
+
+Item: filepilot-v1-8 (filepilot-2)
