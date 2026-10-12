@@ -1042,3 +1042,7 @@ Registro fora de escopo (nao e decisao pendente):
 | - | 27.2 mensagem fixa de 6 na `PASTA_INVALIDA` por laco | - | `[DECISAO: aprovada no enriquecimento; sugestao 2]` |
 | - | 27.5 `UPDATE` do helper so em linha `em_andamento` | - | `[DECISAO: aprovada no enriquecimento; sugestao 3]` |
 | - | 27.5 contagens da linha recuperada recalculadas das operacoes; `finished_at` com a hora da recuperacao; premissa de nenhuma organizacao em curso | - | `[DECISAO: recalculo, hora e premissa necessarios para cumprir a opcao A do GAP-001; detalhe em 27.5]` |
+
+## §28 Verificacoes de destino e textos de falha
+
+Item: filepilot-v1-6 (filepilot-2)
