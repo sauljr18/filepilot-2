@@ -26,6 +26,32 @@ Padroes estabelecidos:
 
 O item filepilot-v1-7 entregou os servicos de historico e de desfazer e seus testes; a interface NAO deve reimplementar consulta ao banco nem a restauracao.
 
+Do item filepilot-v1-9 (commit f779c72):
+
+Artefatos criados:
+- filepilot/ui/organize_tab.py - interface - exporta `OrganizeTab(conn)` e as constantes `MODE_EMPTY`, `MODE_LOADING`, `MODE_LISTED`, `MODE_SIMULATED`, `MODE_ORGANIZING` e `MODE_ERROR`
+- filepilot/ui/file_table.py - interface - exporta `FileTableView`, `FileTableModel`, `HEADERS`, `CUSTOM_RULE`, `NO_CATEGORY` e `EMPTY_MESSAGE`
+- tests/ui/test_file_table.py, tests/ui/test_organize_tab_folder.py e tests/ui/test_organize_tab_simulate.py - testes - 31 casos da aba, da tabela e da simulacao
+- .abt/reviews/filepilot-v1-9.md - relatorio - veredito APROVADO da Rita
+
+Contratos:
+- `OrganizeTab(conn: sqlite3.Connection)` (organize_tab.py) guarda `folder: Path | None`, `files`, `plan: Plan | None` e `mode: str` (comeca em `vazio`), com os widgets publicos `folder_edit`, `choose_button`, `refresh_button`, `table`, `simulate_button`, `organize_button` e `summary`; `build_tabs` ja cria a aba no indice 0 com a conexao da janela.
+- Metodos publicos `choose_folder()`, `refresh()` e `simulate()`; `refresh()` relê a pasta, recalcula o plano com `list_rules` e volta a `listado`, entao e o que o fim da organizacao chama para reescanear. `_read_folder(folder) -> Plan | None` e privado e devolve `None` ao mostrar o erro.
+- `_update_buttons()` decide tudo pelo `mode`: Escolher pasta e Atualizar ficam desabilitados em `carregando` e `organizando`; Simular so em `listado` e `simulado`; Organizar em `listado` ou `simulado` com plano nao vazio. Nada coloca a aba em `organizando` ainda.
+- `organize_button` ja habilita pela regra da SPEC 7.2, mas NAO tem `clicked` ligado: a execucao, a conferencia da simulacao, o `OrganizeWorker`, a barra de progresso e o `MainWindow.organizing` sao deste item; Desfazer, "Ver detalhes" e `organization_finished` ainda nao existem. O `ActionBar` e um `QHBoxLayout` local de `_build_layout` (Simular, Organizar e um `addStretch` no fim) e o `summary` fica abaixo dele; promova a atributo o que precisar.
+- `FileTableView.set_rows(files, plan, show_destination=True)`: em `listado` a aba passa `show_destination=False` (categoria prevista, destino vazio); em `simulado`, `True`. A coluna Categoria mostra a subpasta, "Regra personalizada" ou "sem categoria".
+- Armadilha: `build_tabs` continua sem acesso a janela, entao o caminho para ligar `MainWindow.organizing` e emitir `organization_finished` ao `HistoryTab` ainda precisa ser criado (por exemplo, sinais conectados em `MainWindow.__init__`).
+- Achado aberto da Rita (nao bloqueou): `_read_folder` captura so `FilePilotError`; um `OSError` do `scan_folder` (relancado em scanner.py `_resolve_folder`) deixa `mode` em `carregando` com os botoes desabilitados. Ao tocar a leitura da pasta, trate `OSError` e va para `erro`.
+
+Nomes decididos:
+- Os estados `mode` sao constantes publicas `MODE_*` em organize_tab.py; os textos ficam em constantes privadas (`_CHOOSE_FOLDER`, `_LOADING`, `_NO_OPERATIONS`, `_NOT_CHANGED`).
+
+Padroes estabelecidos:
+- Os testes da aba usam uma fixture `conn` com `open_connection(tmp_path / "db" / "filepilot.db")` e trocam o seletor por `monkeypatch.setattr(organize_tab_module.QFileDialog, "getExistingDirectory", lambda *a, **k: str(pasta))`.
+- A interface nao usa `os` nem `shutil`; `sqlite3` so entra nas anotacoes de tipo.
+
+O item filepilot-v1-9 entregou a aba, a tabela e a simulacao: NAO reimplementar a escolha da pasta, a lista, o Simular nem o Atualizar.
+
 ## Features
 
 ### filepilot-v1-11-f1 HistoryTab com paginacao e detalhes por organizacao
