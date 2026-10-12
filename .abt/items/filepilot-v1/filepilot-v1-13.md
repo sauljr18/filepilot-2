@@ -36,6 +36,22 @@ Contratos:
 
 O item filepilot-v1-10 entregou a execucao da organizacao em `QThread` com barra de progresso: este item continua so empacotando e NAO altera `filepilot/ui`.
 
+Do item filepilot-v1-11 (commit 3e4defc):
+
+Artefatos criados:
+- filepilot/ui/history_tab.py - interface - exporta `HistoryTab(conn)`, `PAGE_SIZE` e `format_local_time`; e importado por `filepilot/ui/main_window.py`, entao o PyInstaller o encontra pela cadeia de imports de `main()`
+- filepilot/ui/organize_worker.py (alterado) - exporta tambem `UndoWorker(db_path)`; `run_in_thread` passa a aceitar `OrganizeWorker | UndoWorker`
+- filepilot/ui/organize_tab.py e filepilot/ui/main_window.py - interface (alterados) - a aba Organizar ganha "Ver detalhes" e "Desfazer última organização"; `build_tabs` cria `HistoryTab(conn)` no segundo item
+- tests/ui/test_history_tab.py, tests/ui/test_history_details.py e tests/ui/test_undo_button.py - testes - 44 casos do historico, dos detalhes e do desfazer
+- .abt/reviews/filepilot-v1-11.md - relatorio - veredito APROVADO com Gate UI-1 DEFERIDO, smoke ao vivo feito pelo Ivan em 2026-10-12
+
+Contratos:
+- Nenhum contrato novo de empacotamento: nenhuma dependencia nova em `pyproject.toml` e o ponto de entrada continua `main() -> int` em `filepilot/__main__.py`.
+- Armadilha: `MainWindow.organizing` tambem fica verdadeiro durante o desfazer, e a janela nao fecha enquanto ele roda; o `UndoWorker` abre a propria conexao pelo `db_path`, como o `OrganizeWorker`.
+- Achados abertos da Rita (nao bloquearam): a barra de progresso continua visivel depois de desfazer e `format_local_time` nao trata `OverflowError`; ambos em `filepilot/ui`, fora do escopo deste item.
+
+O item filepilot-v1-11 entregou a aba Histórico e o botao Desfazer: este item continua so empacotando e NAO altera `filepilot/ui`.
+
 ## Features
 
 ### filepilot-v1-13-f1 Empacotamento com PyInstaller em modo onedir
