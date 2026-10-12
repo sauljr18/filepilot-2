@@ -877,3 +877,7 @@ Item: filepilot-mypy-win32-1 (filepilot-2)
 ## §22 Passo de mypy do workflow com comando unico
 
 Item: filepilot-mypy-win32-2 (filepilot-2)
+
+## §23 Leitura da pasta e pastas protegidas
+
+Item: filepilot-v1-2 (filepilot-2)
