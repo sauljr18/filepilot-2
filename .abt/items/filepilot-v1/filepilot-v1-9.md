@@ -5,7 +5,27 @@ Epico: filepilot-v1 | Ordem: 9 | Pontos: 5 | Depende de: filepilot-v1-2,filepilo
 Na aba Organizar a pessoa escolhe a pasta, ve cada arquivo com categoria e destino previstos e roda a simulacao com as regras atuais sem alterar nada no disco.
 
 ## Contexto herdado
--
+Entregue por filepilot-v1-8 (commit e0c61a3). Nao reimplementar: a janela principal, a instancia unica, o bloqueio de fechamento e a falha de abertura do banco. A aba Organizar entra no lugar do marcador e nao mexe nisso.
+
+Artefatos criados:
+- filepilot/__main__.py - ponto de entrada - exporta `main`, `open_main_window(data_dir) -> MainWindow | int` e `default_data_dir`
+- filepilot/ui/__init__.py - pacote - sem exportacoes
+- filepilot/ui/main_window.py - interface - exporta `MainWindow`, `build_tabs`, `PlaceholderTab`, `Reloadable`, `WINDOW_TITLE` e `TAB_TITLES`
+
+Contratos:
+- `build_tabs(conn: sqlite3.Connection) -> list[tuple[str, QWidget]]` (filepilot/ui/main_window.py) devolve `(titulo, widget)` na ordem "Organizar", "Histórico", "Regras"; trocar o marcador e trocar o widget do primeiro item por `OrganizeTab(conn)`. Os titulos vem de `TAB_TITLES`.
+- `MainWindow(db_path: Path, lock: QLockFile | None = None)` guarda `db_path`, `conn` (de `open_connection`), `organizing: bool` (comeca `False`), `tabs: QTabWidget` e a trava; `closeEvent` ignora o fechamento com `organizing` verdadeiro.
+- `Reloadable` e um `Protocol` com `reload() -> None`; a janela chama `reload()` so nas abas de indice 1 e 2 (Histórico e Regras) em `currentChanged`. A aba Organizar nao recarrega.
+- Armadilha: `build_tabs` recebe so a conexao, nao a janela. `OrganizeTab` precisa de um caminho para ligar `MainWindow.organizing` durante a organizacao e o desfazer, e para emitir `organization_finished(int)` ao `HistoryTab`; esse caminho ainda nao existe e o item deve cria-lo (por exemplo, sinais conectados em `MainWindow.__init__`) sem mudar a assinatura de `MainWindow`.
+- Armadilha: `MainWindow` abre o banco no `__init__`; um teste que cria a janela usa `tmp_path / "filepilot.db"` e `qtbot.addWidget`.
+
+Nomes decididos:
+- Os textos de aviso ficam em constantes privadas do modulo que os usa (`_CLOSE_BLOCKED` em main_window.py; `_ALREADY_OPEN` e `_DB_UNAVAILABLE` em __main__.py).
+- Os testes trocam `QMessageBox` por um dublê com `monkeypatch.setattr(modulo.QMessageBox, "information", spy)`, em que `modulo` e o modulo que chama (`app_main` ou `main_window_module`).
+
+Padroes estabelecidos:
+- Os testes de interface ficam em `tests/ui/` (pacote com `__init__.py`), com `qtbot` do pytest-qt e `QT_QPA_PLATFORM=offscreen`.
+- A interface so mostra o `message` do `FilePilotError`; quem decide encerrar o aplicativo e `open_main_window` (codigo 1 so para a falha de abertura do banco).
 
 ## Features
 
