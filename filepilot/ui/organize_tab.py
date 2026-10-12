@@ -1,25 +1,28 @@
-"""Aba Organizar: escolha da pasta, lista de arquivos e simulacao (SPEC 7.2)."""
+"""Aba Organizar: escolha da pasta, lista, simulacao e organizacao com progresso (SPEC 7.2)."""
 
 import sqlite3
 from pathlib import Path
 
-from PySide6.QtCore import QCoreApplication
+from PySide6.QtCore import QCoreApplication, QThread, Signal
 from PySide6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QMessageBox,
+    QProgressBar,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
 
 from filepilot.domain.errors import FilePilotError
-from filepilot.domain.models import Plan, ScannedFile
+from filepilot.domain.models import OrganizationResult, Plan, ScannedFile
 from filepilot.services.planner import build_plan
 from filepilot.services.rules import list_rules
 from filepilot.services.scanner import scan_folder
 from filepilot.ui.file_table import FileTableView
+from filepilot.ui.organize_worker import OrganizeWorker, run_in_thread
 
 MODE_EMPTY = "vazio"
 MODE_LOADING = "carregando"
@@ -33,9 +36,17 @@ _LOADING = "Lendo a pasta..."
 _NO_OPERATIONS = "Não há operações para executar."
 _FILE_DIALOG_TITLE = "Escolher pasta"
 _NOT_CHANGED = "Nenhum arquivo foi alterado."
+_PROGRESS_FORMAT = "%v de %m arquivos"
+_ERROR_TITLE = "FilePilot"
+_FOLDER_CHANGED = (
+    "A pasta mudou desde a simulação. "
+    "Confira a nova simulação e clique em Organizar de novo."
+)
 # Texto de PASTA_ILEGIVEL (SPEC 6); repetido aqui porque a ui nao importa o
 # dicionario privado do scanner. Um teste compara os dois.
 _UNREADABLE = "Não foi possível ler a pasta escolhida."
+# Texto de BANCO_INDISPONIVEL (SPEC 6), repetido pelo mesmo motivo de `_UNREADABLE`.
+_DATABASE_UNAVAILABLE = "Não foi possível acessar o histórico do FilePilot."
 
 # Estados em que ha uma lista valida na tabela e a pessoa pode agir sobre ela.
 _ACTIONABLE = (MODE_LISTED, MODE_SIMULATED)
@@ -43,16 +54,38 @@ _ACTIONABLE = (MODE_LISTED, MODE_SIMULATED)
 _BUSY = (MODE_LOADING, MODE_ORGANIZING)
 
 
-class OrganizeTab(QWidget):
-    """Mostra a pasta escolhida, o plano e o resultado da simulacao."""
+def _signature(plan: Plan | None) -> list[tuple[Path, Path, str | None]]:
+    """O que a pessoa confere na simulacao: origem, destino e regra, na ordem."""
+    if plan is None:
+        return []
+    return [
+        (operation.source_path, operation.destination_path, operation.rule_name)
+        for operation in plan.operations
+    ]
 
-    def __init__(self, conn: sqlite3.Connection) -> None:
+
+class OrganizeTab(QWidget):
+    """Mostra a pasta e o plano, simula e executa a organizacao com progresso.
+
+    `db_path` e o caminho do banco que a janela guarda (SPEC 7.1): o worker abre
+    a propria conexao nele, porque a de `conn` nao atravessa threads.
+    """
+
+    organization_finished = Signal(int)
+    # Verdadeiro enquanto a organizacao roda; a janela o espelha em `organizing`.
+    organizing_changed = Signal(bool)
+
+    def __init__(self, conn: sqlite3.Connection, db_path: Path | None = None) -> None:
         super().__init__()
         self._conn = conn
+        self._db_path = db_path
         self.folder: Path | None = None
         self.files: list[ScannedFile] = []
         self.plan: Plan | None = None
         self.mode = MODE_EMPTY
+        self._thread: QThread | None = None
+        # O Python apaga o worker se ninguem guardar a referencia enquanto ele roda.
+        self._worker: OrganizeWorker | None = None
 
         self.folder_edit = QLineEdit()
         self.folder_edit.setReadOnly(True)
@@ -61,12 +94,16 @@ class OrganizeTab(QWidget):
         self.table = FileTableView()
         self.simulate_button = QPushButton("Simular")
         self.organize_button = QPushButton("Organizar")
+        self.progress = QProgressBar()
+        self.progress.setFormat(_PROGRESS_FORMAT)
+        self.progress.setVisible(False)
         self.summary = QLabel()
         self._build_layout()
 
         self.choose_button.clicked.connect(self.choose_folder)
         self.refresh_button.clicked.connect(self.refresh)
         self.simulate_button.clicked.connect(self.simulate)
+        self.organize_button.clicked.connect(self.organize)
         self._show_empty()
 
     def _build_layout(self) -> None:
@@ -82,6 +119,7 @@ class OrganizeTab(QWidget):
         layout.addLayout(folder_bar)
         layout.addWidget(self.table, 1)
         layout.addLayout(action_bar)
+        layout.addWidget(self.progress)
         layout.addWidget(self.summary)
 
     # -- estados ---------------------------------------------------------
@@ -128,8 +166,12 @@ class OrganizeTab(QWidget):
 
     # -- leitura da pasta ------------------------------------------------
 
-    def _read_folder(self, folder: Path) -> Plan | None:
-        """Le a pasta e recalcula o plano com as regras atuais; None em erro."""
+    def _read_folder(self, folder: Path, empty_ok: bool = False) -> Plan | None:
+        """Le a pasta e recalcula o plano com as regras atuais; None em erro.
+
+        Com `empty_ok`, pasta sem arquivos nao e erro: e o estado normal depois
+        de organizar tudo, e vira uma lista vazia com plano vazio.
+        """
         self.summary.setText(_LOADING)
         self._set_mode(MODE_LOADING)
         QCoreApplication.processEvents()
@@ -137,6 +179,10 @@ class OrganizeTab(QWidget):
             files = scan_folder(folder)
             plan = build_plan(folder, files, list_rules(self._conn))
         except FilePilotError as error:
+            if empty_ok and error.code == "PASTA_VAZIA":
+                self.files = []
+                self.plan = Plan(folder)
+                return self.plan
             self._show_error(error)
             return None
         except OSError:
@@ -162,6 +208,7 @@ class OrganizeTab(QWidget):
         """Le a pasta de novo, recalcula o plano e descarta a simulacao exibida."""
         if self.folder is None:
             return
+        self.progress.setVisible(False)
         if self._read_folder(self.folder) is not None:
             self._show_listed()
 
@@ -169,6 +216,79 @@ class OrganizeTab(QWidget):
         """Le a pasta e recalcula o plano com as regras atuais, sem alterar o disco."""
         if self.folder is None:
             return
+        self.progress.setVisible(False)
         plan = self._read_folder(self.folder)
         if plan is not None:
             self._show_simulated(plan)
+
+    def organize(self) -> None:
+        """Le a pasta de novo, confere com a simulacao exibida e executa o plano."""
+        if self.folder is None:
+            return
+        self.progress.setVisible(False)
+        previous_mode = self.mode
+        shown = _signature(self.plan)
+        plan = self._read_folder(self.folder)
+        if plan is None:
+            return
+        if plan.is_empty:
+            if previous_mode == MODE_SIMULATED:
+                self._show_simulated(plan)
+            else:
+                self._show_listed()
+                self.summary.setText(_NO_OPERATIONS)
+            return
+        if previous_mode == MODE_SIMULATED and _signature(plan) != shown:
+            self._show_simulated(plan)
+            self.summary.setText(_FOLDER_CHANGED)
+            return
+        self._start_organization(plan)
+
+    def _start_organization(self, plan: Plan) -> None:
+        """Dispara o `OrganizeWorker` em uma `QThread`, com a barra zerada."""
+        if self._db_path is None:
+            self._on_failed("BANCO_INDISPONIVEL", _DATABASE_UNAVAILABLE)
+            return
+        worker = OrganizeWorker(plan, self._db_path)
+        worker.progress.connect(self._on_progress)
+        worker.finished.connect(self._on_finished)
+        worker.failed.connect(self._on_failed)
+        self.progress.setRange(0, len(plan.operations))
+        self.progress.setValue(0)
+        self.progress.setVisible(True)
+        self.summary.setText("")
+        self._set_mode(MODE_ORGANIZING)
+        self.organizing_changed.emit(True)
+        self._worker = worker
+        self._thread = run_in_thread(worker)
+
+    def _release_worker(self) -> None:
+        """Espera a thread acabar e solta o worker e a thread."""
+        if self._thread is not None:
+            # O `quit` direto de `run_in_thread` ja rodou quando o sinal chegou aqui.
+            self._thread.wait()
+            self._thread = None
+        self._worker = None
+
+    def _on_progress(self, done: int, total: int, filename: str) -> None:
+        self.progress.setRange(0, total)
+        self.progress.setValue(done)
+
+    def _on_finished(self, result: OrganizationResult) -> None:
+        """Fecha a barra, relê a pasta e avisa que a organizacao terminou."""
+        self._release_worker()
+        self.progress.setValue(self.progress.maximum())
+        if self.folder is not None and self._read_folder(self.folder, empty_ok=True) is not None:
+            self._show_listed()
+            self.summary.setText(
+                f"Concluído: {result.moved_count} movidos, {result.failed_count} falhas."
+            )
+        self.organizing_changed.emit(False)
+        self.organization_finished.emit(result.organization_id)
+
+    def _on_failed(self, code: str, message: str) -> None:
+        """Mostra o erro de contrato ou o inesperado e deixa a janela aberta."""
+        self._release_worker()
+        self.organizing_changed.emit(False)
+        self._show_error(FilePilotError(code, message))
+        QMessageBox.critical(self, _ERROR_TITLE, message)

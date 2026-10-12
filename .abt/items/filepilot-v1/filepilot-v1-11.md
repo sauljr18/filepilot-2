@@ -52,6 +52,33 @@ Padroes estabelecidos:
 
 O item filepilot-v1-9 entregou a aba, a tabela e a simulacao: NAO reimplementar a escolha da pasta, a lista, o Simular nem o Atualizar.
 
+Do item filepilot-v1-10 (commit 09e3902):
+
+Artefatos criados:
+- filepilot/ui/organize_worker.py - interface - exporta `OrganizeWorker(plan, db_path)` (sinais `progress(int, int, str)`, `finished(object)` e `failed(str, str)`) e `run_in_thread(worker) -> QThread`
+- filepilot/ui/organize_tab.py - interface (alterado) - `OrganizeTab(conn, db_path=None)`, com `organize()`, a barra `progress` e os sinais `organization_finished(int)` e `organizing_changed(bool)`
+- filepilot/ui/main_window.py - interface (alterado) - `build_tabs(conn, db_path=None)` passa o caminho do banco a aba, e `MainWindow._set_organizing(bool)` espelha `organizing_changed` em `MainWindow.organizing`
+- tests/ui/test_organize_worker.py, tests/ui/test_organize_confirm.py e tests/ui/test_organize_states.py - testes - 19 casos do worker, da conferencia da simulacao e dos estados
+- .abt/reviews/filepilot-v1-10.md - relatorio - veredito APROVADO com Gate UI-1 DEFERIDO, smoke ao vivo feito pelo Ivan em 2026-10-12
+
+Contratos:
+- `organization_finished = Signal(int)` e emitido no fim de `OrganizeTab._on_finished`, depois da releitura da pasta e de `organizing_changed(False)`, e leva so o `organization_id`. O `failed_count` do resultado existe apenas dentro de `_on_finished` (`OrganizationResult`); o botao "Ver detalhes" precisa dele (ou do detalhe lido do banco), entao o sinal ou a aba precisam expor esse dado. O resumo "Concluído: X movidos, Y falhas." e o `QLabel` `summary`.
+- A ligacao com a janela ja existe e e o modelo para o Historico: o laco de `MainWindow.__init__` (main_window.py:65-68) percorre `build_tabs` e conecta `organizing_changed` quando a aba e `OrganizeTab`; conecte `organization_finished` da mesma forma ao `HistoryTab` (recarregar a lista e reavaliar `last_undoable`).
+- `OrganizeTab.organize()` roda o `OrganizeWorker` em `QThread` e `MainWindow.organizing` fica verdadeiro ate o fim; `undo_last` pega o mesmo `OPERATION_LOCK` sem bloquear, entao Desfazer fica desabilitado com `organizing` verdadeiro e roda fora da thread da interface (um `run_in_thread` hoje so aceita `OrganizeWorker`).
+- Armadilha: `run_in_thread` devolve a `QThread` sem dono; quem chama guarda o worker e a thread, espera a thread acabar (`wait`) e so entao solta os dois. O `quit` e ligado por `DirectConnection` a `finished` e `failed`; com conexao enfileirada o `wait` do slot travava.
+- Armadilha: depois de organizar tudo, a releitura da pasta devolve `PASTA_VAZIA`; `_read_folder(folder, empty_ok=True)` trata isso como lista vazia so no fim da organizacao. Fora dali, pasta sem arquivos continua sendo o erro `PASTA_VAZIA`.
+- `OrganizeTab(conn)` sem `db_path` continua valido para testes; `organize()` nele mostra `BANCO_INDISPONIVEL` e nao move nada. A `MainWindow` sempre passa o caminho.
+
+Nomes decididos:
+- Os sinais da aba sao `organization_finished` e `organizing_changed`; o estado da janela segue `MainWindow.organizing`.
+- O worker abre a propria conexao pelo `db_path` (a conexao SQLite de `conn` nao atravessa threads).
+
+Padroes estabelecidos:
+- Os testes que organizam de verdade esperam `qtbot.waitSignal(tab.organization_finished)` e usam `OrganizeTab(conn, folder.parent / "db" / "filepilot.db")`; falha de worker e simulada trocando `organize` em `organize_worker_module` e `QMessageBox.critical` por dubles com `monkeypatch`.
+- Teste que usa `run_in_thread` chama `thread.wait()` antes de terminar, para nao derrubar o processo.
+
+O item filepilot-v1-10 entregou a execucao da organizacao com barra de progresso, a conferencia da simulacao e os estados da aba: NAO reimplementar o `OrganizeWorker`, a releitura nem o bloqueio de fechamento.
+
 ## Features
 
 ### filepilot-v1-11-f1 HistoryTab com paginacao e detalhes por organizacao

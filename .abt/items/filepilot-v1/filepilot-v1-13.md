@@ -24,6 +24,18 @@ Nomes decididos:
 Padroes estabelecidos:
 - Os testes de interface usam `QT_QPA_PLATFORM=offscreen` e o dublê de `QMessageBox.exec` ou `RuleEditorDialog.exec` com `monkeypatch`.
 
+Do item filepilot-v1-10 (commit 09e3902):
+
+Artefatos criados:
+- filepilot/ui/organize_worker.py - interface - exporta `OrganizeWorker` e `run_in_thread`; e importado por `filepilot/ui/organize_tab.py`, entao o PyInstaller o encontra pela cadeia de imports de `main()`
+- filepilot/ui/organize_tab.py e filepilot/ui/main_window.py - interface (alterados) - a aba Organizar passa a executar a organizacao; `build_tabs(conn, db_path=None)`
+- .abt/reviews/filepilot-v1-10.md - relatorio - veredito APROVADO com Gate UI-1 DEFERIDO, smoke ao vivo feito pelo Ivan em 2026-10-12
+
+Contratos:
+- Nenhum contrato novo de empacotamento: o ponto de entrada continua `main() -> int` em `filepilot/__main__.py`, e a janela recebe o `db_path` que `main()` calcula.
+
+O item filepilot-v1-10 entregou a execucao da organizacao em `QThread` com barra de progresso: este item continua so empacotando e NAO altera `filepilot/ui`.
+
 ## Features
 
 ### filepilot-v1-13-f1 Empacotamento com PyInstaller em modo onedir
