@@ -1235,3 +1235,7 @@ Item: filepilot-fix2-2 (filepilot-2)
 ## §40 Instancia unica avisa quando nao consegue saber se ha outra janela aberta
 
 Item: filepilot-fix2-3 (filepilot-2)
+
+## §41 Planejamento com laco de atalhos vira PASTA_INVALIDA
+
+Item: filepilot-fix2-4 (filepilot-2)
