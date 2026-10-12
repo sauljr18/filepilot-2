@@ -93,6 +93,41 @@ def test_pasta_fora_das_protegidas_e_listada(
     assert [item.name for item in scan_folder(livre)] == ["a.txt"]
 
 
+@pytest.mark.parametrize("value", ["", "   "])
+@pytest.mark.parametrize("variable", ENV_VARIABLES)
+def test_variavel_vazia_ou_so_espacos_vale_como_ausente(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, variable: str, value: str
+) -> None:
+    pasta = tmp_path / "pasta"
+    pasta.mkdir()
+    (pasta / "a.txt").write_bytes(b"x")
+    monkeypatch.setenv(variable, value)
+    monkeypatch.chdir(tmp_path)
+
+    assert [item.name for item in scan_folder(pasta)] == ["a.txt"]
+
+
+@pytest.mark.parametrize("value", ["", "   "])
+def test_raiz_protegida_vazia_usa_o_padrao_e_nao_a_pasta_atual(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, value: str
+) -> None:
+    monkeypatch.setenv("SystemRoot", value)
+    monkeypatch.chdir(tmp_path)
+
+    root = scanner._protected_root("SystemRoot", r"C:\Windows")
+
+    assert root == Path(r"C:\Windows").resolve()
+    assert root != tmp_path.resolve()
+
+
+def test_raiz_protegida_com_valor_definido_e_resolvida_como_esta(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SystemRoot", str(tmp_path))
+
+    assert scanner._protected_root("SystemRoot", r"C:\Windows") == tmp_path.resolve()
+
+
 def test_caminho_unc_e_protegido() -> None:
     _assert_protected(Path(r"\\servidor\pasta"))
 
