@@ -19,4 +19,4 @@ jobs:
       - name: Testes
         run: pytest
       - name: Checagem de tipos
-        run: mypy . --no-error-summary
+        run: python -m mypy --platform win32 filepilot
