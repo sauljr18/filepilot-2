@@ -1070,3 +1070,11 @@ Item: filepilot-v1-7 (filepilot-2)
 ## §34 Janela principal, abas e instancia unica
 
 Item: filepilot-v1-8 (filepilot-2)
+
+## §35 Aba Regras e dialogo de regra
+
+Item: filepilot-v1-12 (filepilot-2)
+
+## §36 Aba Organizar: pasta, lista e simulacao
+
+Item: filepilot-v1-9 (filepilot-2)
