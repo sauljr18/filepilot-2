@@ -869,3 +869,7 @@ Nenhuma pendencia aberta nesta secao.
 ## §20 Checagem de tipos com mypy no pyproject
 
 Item: filepilot-mypy-1 (filepilot-2)
+
+## §21 Comando unico de mypy nos itens filepilot-v1-2 a 13
+
+Item: filepilot-mypy-win32-1 (filepilot-2)
