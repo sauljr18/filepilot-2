@@ -889,3 +889,7 @@ Item: filepilot-v1-3 (filepilot-2)
 ## §25 Planejamento das operacoes e conflitos de nome
 
 Item: filepilot-v1-4 (filepilot-2)
+
+## §26 Organizacao com historico por arquivo
+
+Item: filepilot-v1-5 (filepilot-2)
