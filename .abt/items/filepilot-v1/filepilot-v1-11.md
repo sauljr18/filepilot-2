@@ -5,7 +5,26 @@ Epico: filepilot-v1 | Ordem: 11 | Pontos: 5 | Depende de: filepilot-v1-7,filepil
 A aba Historico lista organizacoes e detalhes por arquivo, o botao Ver detalhes abre a organizacao com falhas e o botao Desfazer restaura a ultima organizacao pela interface.
 
 ## Contexto herdado
--
+Do item filepilot-v1-7 (commit 7f98bbb):
+
+Artefatos criados:
+- filepilot/services/history.py - servico - `list_organizations`, `get_organization_detail`, `last_undoable` e os tipos `OrganizationRow`, `OperationRow`, `OrganizationPage`
+- filepilot/services/undo.py - servico - `undo_last` e o tipo `UndoResult`
+
+Contratos:
+- `list_organizations(conn, page=1, page_size=50) -> OrganizationPage` (`items`, `page`, `page_size`, `total`); `page` menor que 1 vira 1 e `page_size` fora de 1 a 200 vira 50, entao use `page` e `page_size` da pagina devolvida, nao os pedidos.
+- `get_organization_detail(conn, organization_id) -> list[OperationRow]`, por `seq` crescente; id inexistente devolve lista vazia.
+- `last_undoable(conn) -> OrganizationRow | None`: habilita o botao Desfazer. Devolve `None` quando a ultima organizacao esta `desfeita`, `em_andamento` ou sem arquivos movidos; nao ha retrocesso.
+- `undo_last(conn) -> UndoResult` (`organization_id`, `restored_count`, `not_restored: list[tuple[str, str]]`, `removed_folders`). Levanta `NADA_PARA_DESFAZER`, `ORGANIZACAO_EM_ANDAMENTO` e `BANCO_INDISPONIVEL` como `FilePilotError`, com as mensagens da SPEC em `.message`.
+- Armadilha: `undo_last` pega `OPERATION_LOCK` sem bloquear, entao deve rodar fora da thread da interface e a interface trata `ORGANIZACAO_EM_ANDAMENTO`. Um texto de `not_restored` fora da SPEC: "caminho original fora da pasta escolhida".
+
+Nomes decididos:
+- Os tipos de linha vivem em `history.py`, nao em `filepilot/domain/models.py`.
+
+Padroes estabelecidos:
+- Erros de contrato por modulo: dicionario `_MESSAGES` e funcao `_error(code)`, como em `organizer.py`.
+
+O item filepilot-v1-7 entregou os servicos de historico e de desfazer e seus testes; a interface NAO deve reimplementar consulta ao banco nem a restauracao.
 
 ## Features
 
