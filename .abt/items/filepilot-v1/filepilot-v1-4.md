@@ -5,7 +5,29 @@ Epico: filepilot-v1 | Ordem: 4 | Pontos: 6 | Depende de: filepilot-v1-1,filepilo
 build_plan calcula a lista de operacoes com categoria padrao, precedencia de regra, sufixo de nome repetido e guarda de pasta, sem tocar no disco nem no banco.
 
 ## Contexto herdado
--
+Entregue por filepilot-v1-2 (commit fe1ae8b). Nao reimplementar: a leitura do nivel da pasta (`scan_folder`), a normalizacao de extensao, a recusa de pasta invalida, ilegivel, vazia, protegida ou de rede e os testes de `tests/services`.
+
+Artefatos criados:
+- filepilot/services/__init__.py - pacote - docstring apenas; `planner.py` entra neste pacote
+- filepilot/services/scanner.py - servico - exporta `scan_folder(folder: Path) -> list[ScannedFile]`
+- tests/services/__init__.py - pacote de testes - a pasta `tests/services` ja existe; novos testes entram nela
+- tests/services/test_scanner.py - testes - listagem, ordenacao, extensao, erros de pasta, link simbolico e `.lnk`
+- tests/services/test_scanner_protected.py - testes - pastas protegidas e de rede, com `monkeypatch` de `os.environ` e de `scanner._drive_type`
+- .abt/reviews/filepilot-v1-2.md - relatorio - veredito APROVADO da Rita
+
+Contratos:
+- `scan_folder` (filepilot/services/scanner.py): recebe `Path`, devolve `list[ScannedFile]` ja ordenada por `name` sem diferenciar maiusculas, com `extension` em minusculas, sem ponto (`""` se nao houver; `a.tar.gz` vira `gz`). Levanta `FilePilotError` com `PASTA_INVALIDA`, `PASTA_PROTEGIDA`, `PASTA_ILEGIVEL` ou `PASTA_VAZIA`. So le o disco; `build_plan` recebe essa lista pronta e nao chama `scan_folder`.
+- Mensagens de erro: ficam no dicionario `_MESSAGES` de scanner.py (privado, texto igual ao da tabela da SPEC secao 6); o planner nao as reutiliza.
+- Armadilha: o relatorio da Rita lista 3 achados abertos que nao bloqueiam e nao pertencem ao planner: laco de link simbolico na pasta escolhida faz `resolve()` levantar `RuntimeError` (scanner.py:52), variavel de ambiente vazia vira a pasta atual (scanner.py:56) e empate de nomes que diferem so por maiuscula tem ordem nao deterministica (scanner.py:101).
+
+Nomes decididos:
+- Os helpers privados de scanner.py sao `_read_stat`, `_drive_type`, `_is_protected`, `_extension` e `_scan_entry`; os testes trocam `_read_stat` e `_drive_type` por `monkeypatch`.
+- Os testes de servico ficam em `tests/services/test_<modulo>.py` e, quando um modulo tem varios assuntos, em `test_<modulo>_<assunto>.py` (como `test_scanner_protected.py`).
+
+Padroes estabelecidos:
+- Simular Windows no Linux e por `monkeypatch` (`os.environ`, atributos de `stat` e `ctypes.windll` com `raising=False`); teste que so vale no Windows usa `skipif`.
+- O servico levanta `FilePilotError(code, message)` pelo helper `_error(code)`, com `message` vindo do dicionario de mensagens do proprio modulo.
+- Comparacao de nome sem diferenciar maiusculas usa `str.casefold()`.
 
 ## Features
 
