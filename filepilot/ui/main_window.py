@@ -33,15 +33,18 @@ class PlaceholderTab(QWidget):
         """Sem dados a recarregar."""
 
 
-def build_tabs(conn: sqlite3.Connection) -> list[tuple[str, QWidget]]:
+def build_tabs(
+    conn: sqlite3.Connection, db_path: Path | None = None
+) -> list[tuple[str, QWidget]]:
     """Cria as abas na ordem Organizar, Histórico e Regras.
 
-    As abas Organizar e Regras sao reais e recebem a mesma conexao da janela;
+    As abas Organizar e Regras sao reais e recebem a mesma conexao da janela; a
+    Organizar recebe tambem o `db_path`, para o worker abrir a propria conexao;
     o item filepilot-v1-11 troca o marcador de Histórico pela aba real.
     """
     organize, history, rules = TAB_TITLES
     return [
-        (organize, OrganizeTab(conn)),
+        (organize, OrganizeTab(conn, db_path)),
         (history, PlaceholderTab()),
         (rules, RulesTab(conn)),
     ]
@@ -59,10 +62,15 @@ class MainWindow(QMainWindow):
         self.conn = open_connection(db_path)
         self.setWindowTitle(WINDOW_TITLE)
         self.tabs = QTabWidget()
-        for title, tab in build_tabs(self.conn):
+        for title, tab in build_tabs(self.conn, db_path):
             self.tabs.addTab(tab, title)
+            if isinstance(tab, OrganizeTab):
+                tab.organizing_changed.connect(self._set_organizing)
         self.tabs.currentChanged.connect(self._on_tab_changed)
         self.setCentralWidget(self.tabs)
+
+    def _set_organizing(self, organizing: bool) -> None:
+        self.organizing = organizing
 
     def _on_tab_changed(self, index: int) -> None:
         if index not in _RELOAD_ON_FOCUS:
