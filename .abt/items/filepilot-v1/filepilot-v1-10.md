@@ -5,7 +5,28 @@ Epico: filepilot-v1 | Ordem: 10 | Pontos: 5 | Depende de: filepilot-v1-5,filepil
 O botao Organizar executa o plano em thread de trabalho com barra de progresso, conferencia da simulacao exibida e resumo de movidos e falhas, sem travar a janela.
 
 ## Contexto herdado
--
+Entregue por filepilot-v1-6 (commit 0d5f566). Nao reimplementar: as verificacoes de destino (caminho acima de 259, subpasta que e atalho em cada nivel, guarda de pasta), os textos de falha de 6.7 e a classificacao de `ERRO_INTERNO`. Elas ja existem e tem testes proprios; `organize` so as usa.
+
+Artefatos criados:
+- filepilot/services/destination_checks.py - servico - exporta `check_destination(folder, destination) -> str | None`, `has_shortcut(folder, directory) -> bool`, `failure_text(exc: OSError, creating: bool) -> str` e as constantes de texto `IN_USE`, `NO_PERMISSION`, `NOT_FOUND`, `TOO_LONG`, `SHORTCUT`, `OUTSIDE`, `MKDIR`, `OTHER`, `MAX_PATH`
+- tests/services/test_destination_checks.py - testes - 259 e 260, link simbolico, cada nivel da subpasta e junction (so no Windows)
+- tests/services/test_failure_messages.py - testes - os 5 textos gravados em `operations.error_message` e `internal_error`
+- tests/test_repository_rules.py - testes - zero `os.replace`, `shutil.move`, `os.remove`, `unlink` e `shutil.rmtree` em `filepilot/services`, zero `socket`, `http`, `urllib` e `requests` em `filepilot`
+- .abt/reviews/filepilot-v1-6.md - relatorio - veredito APROVADO da Rita
+
+Contratos:
+- `internal_error(exc: BaseException) -> FilePilotError` (filepilot/services/organizer.py:42): devolve `FilePilotError` como esta e converte qualquer outra excecao em `FilePilotError("ERRO_INTERNO", "Ocorreu um erro inesperado. Tente de novo.")`, sem o texto bruto. Armadilha: `organize` NAO a chama, e `test_a_trava_e_liberada_depois_de_uma_excecao` exige `RuntimeError` cru de `organize`; quem converte e o `OrganizeWorker` deste item, no sinal `failed(code, message)`.
+- `organize` (organizer.py) mantem a assinatura `organize(plan, conn, progress_callback=None) -> OrganizationResult`; `failures` e uma lista de `(nome do arquivo, motivo)`.
+- Achados abertos da Rita (nao bloqueiam): o detector de `test_repository_rules.py` nao pega alias como `import shutil as sh`; o comentario de decisao do v1-4 em organizer.py:19 ficou acima do import de `destination_checks`.
+
+Nomes decididos:
+- Os nomes `check_destination`, `has_shortcut` e `failure_text` sao publicos (sem `_`); `_is_shortcut` continua privado em destination_checks.py.
+
+Padroes estabelecidos:
+- Os testes de falha por arquivo gravam em `operations.error_message` e conferem `RAW_TEXT not in message`; a conexao do banco abre antes de qualquer `monkeypatch` global, como o de `Path.mkdir`.
+- Link simbolico em teste pula com `pytest.skip` quando o sistema nega; junction usa `skipif(os.name != "nt")`.
+
+O item filepilot-v1-6 entregou as verificacoes, os textos e a classificacao de `ERRO_INTERNO`: NAO reimplementar; o worker deste item so liga `progress_callback` a sinais e converte a excecao com `internal_error`.
 
 ## Features
 
