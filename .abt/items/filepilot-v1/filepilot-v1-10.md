@@ -20,7 +20,7 @@ Criterios de aceite:
 - O worker emite `progress(done, total, filename)`, `finished(result)` e `failed(code, message)`, ligados ao `progress_callback` do servico.
 - Terminado o worker, a pasta e relida, `mode` volta a `listado` e a aba emite `organization_finished` com o id da organizacao.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: QT_QPA_PLATFORM=offscreen pytest tests/ui/test_organize_worker.py -> exit 0
 - parser: python -m py_compile filepilot/ui/organize_worker.py -> exit 0
 - grep deve casar: QThread em filepilot/ui/organize_worker.py
@@ -40,7 +40,7 @@ Criterios de aceite:
 - Com `mode` igual a `listado` (sem simulacao) ou plano igual ao exibido, a organizacao e executada.
 - Plano recalculado vazio nao executa, mostra "Não há operações para executar." e desabilita Organizar.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: QT_QPA_PLATFORM=offscreen pytest tests/ui/test_organize_confirm.py -> exit 0
 - grep deve casar: A pasta mudou desde a simulação em filepilot/ui/organize_tab.py
 Dicas:
@@ -58,7 +58,7 @@ Criterios de aceite:
 - `failed(code, message)` mostra `QMessageBox.critical` com a mensagem e `mode` vai para `erro`; excecao inesperada mostra "Ocorreu um erro inesperado. Tente de novo." e a janela continua aberta.
 - Fechar a janela durante a organizacao continua bloqueado pelo `closeEvent` do item filepilot-v1-8.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: QT_QPA_PLATFORM=offscreen pytest tests/ui/test_organize_states.py -> exit 0
 - grep deve casar: organizing em filepilot/ui/organize_tab.py
 - grep nao deve casar: -P '[\x{2010}-\x{2015}\x{2018}-\x{201F}]' em filepilot
@@ -67,6 +67,6 @@ Dicas:
 - Os textos de erro vem da tabela de codigos da secao 6 (L232-259).
 
 ## Gates do item
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: QT_QPA_PLATFORM=offscreen pytest tests/ui -> exit 0
 - awk do Passo 6 sem saida: awk 'FNR == 1 { f = 0 } { t = $0; sub(/^[ \t]+/, "", t) } t ~ /^```/ { f = !f; next } !f && /§EPIC-[a-z0-9][a-z0-9-]*-[0-9]+/ { print FILENAME ":" FNR ": " $0 }' .abt/SPEC.md .abt/items/filepilot-v1/*.md

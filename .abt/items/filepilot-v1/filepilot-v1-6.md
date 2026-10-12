@@ -20,7 +20,7 @@ Criterios de aceite:
 - Subpasta `Documentos` que ja existe como junction ou link simbolico para fora da pasta resulta em `falha` com "a subpasta de destino é um atalho" para todos os arquivos desse destino e zero arquivos movidos para fora da pasta (teste no windows-latest).
 - A verificacao vale para cada nivel da subpasta de uma regra com varios segmentos.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: pytest tests/services/test_destination_checks.py -> exit 0
 - parser: python -m py_compile filepilot/services/destination_checks.py -> exit 0
 - grep deve casar: isjunction em filepilot/services/destination_checks.py
@@ -41,7 +41,7 @@ Criterios de aceite:
 - O texto bruto do sistema nunca e gravado em `operations.error_message`.
 - Excecao inesperada fora do tratamento por arquivo vira `FilePilotError("ERRO_INTERNO", "Ocorreu um erro inesperado. Tente de novo.")`.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: pytest tests/services/test_failure_messages.py -> exit 0
 - grep deve casar: arquivo em uso por outro programa em filepilot/services
 - grep deve casar: ERRO_INTERNO em filepilot
@@ -59,7 +59,7 @@ Criterios de aceite:
 - Importacao de `socket`, `http`, `urllib` e `requests` aparece 0 vezes em `filepilot`.
 - O teste falha se alguma dessas chamadas for acrescentada.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: pytest tests/test_repository_rules.py -> exit 0
 - grep nao deve casar: shutil.rmtree em filepilot/services
 - grep nao deve casar: import socket em filepilot
@@ -68,6 +68,6 @@ Dicas:
 - O `rmdir` do desfazer (item filepilot-v1-7) usa `Path.rmdir`, que nao esta na lista proibida.
 
 ## Gates do item
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: pytest -> exit 0
 - awk do Passo 6 sem saida: awk 'FNR == 1 { f = 0 } { t = $0; sub(/^[ \t]+/, "", t) } t ~ /^```/ { f = !f; next } !f && /§EPIC-[a-z0-9][a-z0-9-]*-[0-9]+/ { print FILENAME ":" FNR ": " $0 }' .abt/SPEC.md .abt/items/filepilot-v1/*.md

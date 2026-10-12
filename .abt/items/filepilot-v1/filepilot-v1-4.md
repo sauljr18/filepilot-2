@@ -20,7 +20,7 @@ Criterios de aceite:
 - Operacao de regra tem `rule_name` da vencedora e `category` `None`; operacao de categoria padrao tem `category` preenchida e `rule_name` `None`.
 - `seq` comeca em 1 e segue a ordem dos arquivos recebidos.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: pytest tests/services/test_planner.py -> exit 0
 - parser: python -m py_compile filepilot/services/planner.py -> exit 0
 - grep deve casar: skipped em filepilot/services/planner.py
@@ -39,7 +39,7 @@ Criterios de aceite:
 - A comparacao de nomes ignora maiusculas e minusculas, como no Windows.
 - Nenhum arquivo existente no destino e alterado; nenhuma pasta e criada.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: pytest tests/services/test_planner_conflicts.py -> exit 0
 - parser: python -m py_compile filepilot/services/planner.py -> exit 0
 - grep deve casar: .suffix em filepilot/services/planner.py
@@ -57,7 +57,7 @@ Criterios de aceite:
 - A arvore da pasta e identica antes e depois de `build_plan` (nenhuma pasta criada, nenhum arquivo movido) e o banco nao e tocado.
 - `Plan.is_empty` e verdadeiro quando nenhum arquivo tem categoria ou regra.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: pytest tests/services/test_planner_guard.py -> exit 0
 - grep deve casar: is_relative_to em filepilot/services/planner.py
 - grep nao deve casar: mkdir em filepilot/services/planner.py
@@ -67,6 +67,6 @@ Dicas:
 - Simulacao e organizacao usam esta mesma funcao (decisao de design em 15.2, L659-669).
 
 ## Gates do item
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: pytest -> exit 0
 - awk do Passo 6 sem saida: awk 'FNR == 1 { f = 0 } { t = $0; sub(/^[ \t]+/, "", t) } t ~ /^```/ { f = !f; next } !f && /§EPIC-[a-z0-9][a-z0-9-]*-[0-9]+/ { print FILENAME ":" FNR ": " $0 }' .abt/SPEC.md .abt/items/filepilot-v1/*.md

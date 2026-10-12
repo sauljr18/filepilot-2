@@ -20,7 +20,7 @@ Criterios de aceite:
 - Plano vazio devolve `OrganizationResult` com contagens 0 e `organization_id` 0 sem gravar nenhuma `organizations`.
 - `simulate(plan)` devolve o mesmo plano e a arvore da pasta fica identica.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: pytest tests/services/test_organizer.py -> exit 0
 - parser: python -m py_compile filepilot/services/organizer.py -> exit 0
 - grep deve casar: os.rename em filepilot/services/organizer.py
@@ -41,7 +41,7 @@ Criterios de aceite:
 - Arquivo criado no destino entre o plano e a execucao faz o `FileExistsError` do `os.rename` recalcular o sufixo (1) e o arquivo novo ser movido; o arquivo existente mantem o mesmo conteudo.
 - O `destination_path` gravado e o nome final com sufixo.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: pytest tests/services/test_organizer_conflicts.py -> exit 0
 - grep deve casar: FileExistsError em filepilot/services/organizer.py
 - grep nao deve casar: -P '[\x{2010}-\x{2015}\x{2018}-\x{201F}]' em filepilot
@@ -60,7 +60,7 @@ Criterios de aceite:
 - `sqlite3.Error` ao gravar uma operacao devolve o arquivo ja movido ao lugar original e levanta `BANCO_INDISPONIVEL`.
 - Todo destino e reconferido com `is_relative_to` antes do `os.rename`; fora da pasta a operacao vira `falha`.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: pytest tests/services/test_organizer_failures.py -> exit 0
 - grep deve casar: OPERATION_LOCK em filepilot/services/organizer.py
 - grep deve casar: acquire(blocking=False) em filepilot/services/organizer.py
@@ -70,6 +70,6 @@ Dicas:
 - Falha de gravacao: SPEC 6.3 penultimo item e tabela de erros em 9 (L569-592).
 
 ## Gates do item
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: pytest -> exit 0
 - awk do Passo 6 sem saida: awk 'FNR == 1 { f = 0 } { t = $0; sub(/^[ \t]+/, "", t) } t ~ /^```/ { f = !f; next } !f && /§EPIC-[a-z0-9][a-z0-9-]*-[0-9]+/ { print FILENAME ":" FNR ": " $0 }' .abt/SPEC.md .abt/items/filepilot-v1/*.md

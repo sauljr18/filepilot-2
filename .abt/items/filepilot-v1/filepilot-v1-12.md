@@ -20,7 +20,7 @@ Criterios de aceite:
 - Sem regras mostra "Nenhuma regra personalizada. Use \"Nova regra\" para criar a primeira."; carregando mostra "Carregando regras..."; erro mostra a mensagem do servico.
 - Editar, Excluir, Subir e Descer so ficam habilitados com uma linha selecionada; Subir na primeira linha e Descer na ultima ficam desabilitados.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: QT_QPA_PLATFORM=offscreen pytest tests/ui/test_rules_tab.py -> exit 0
 - parser: python -m py_compile filepilot/ui/rules_tab.py -> exit 0
 - grep deve casar: Carregando regras em filepilot/ui/rules_tab.py
@@ -40,7 +40,7 @@ Criterios de aceite:
 - `REGRA_INVALIDA` mostra a mensagem exata de `fields` em vermelho abaixo de cada campo com erro, sem fechar o dialogo; durante a gravacao o botao fica "Salvando..." e desabilitado.
 - `BANCO_INDISPONIVEL` mostra `QMessageBox.critical` e o dialogo continua aberto.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: QT_QPA_PLATFORM=offscreen pytest tests/ui/test_rule_editor_dialog.py -> exit 0
 - parser: python -m py_compile filepilot/ui/rule_editor_dialog.py -> exit 0
 - grep deve casar: Salvando... em filepilot/ui/rule_editor_dialog.py
@@ -58,7 +58,7 @@ Criterios de aceite:
 - Subir e Descer chamam `move_rule`, atualizam a coluna Prioridade e mantem a regra selecionada.
 - Depois de excluir ou mover, as posicoes continuam de 1 a N sem lacuna.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: QT_QPA_PLATFORM=offscreen pytest tests/ui/test_rules_delete_move.py -> exit 0
 - grep deve casar: O histórico não será alterado em filepilot/ui/rules_tab.py
 - grep nao deve casar: -P '[\x{2010}-\x{2015}\x{2018}-\x{201F}]' em filepilot
@@ -67,6 +67,6 @@ Dicas:
 - Dublê de `QMessageBox.question` retornando cada botao nos testes.
 
 ## Gates do item
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: QT_QPA_PLATFORM=offscreen pytest tests/ui -> exit 0
 - awk do Passo 6 sem saida: awk 'FNR == 1 { f = 0 } { t = $0; sub(/^[ \t]+/, "", t) } t ~ /^```/ { f = !f; next } !f && /§EPIC-[a-z0-9][a-z0-9-]*-[0-9]+/ { print FILENAME ":" FNR ": " $0 }' .abt/SPEC.md .abt/items/filepilot-v1/*.md
