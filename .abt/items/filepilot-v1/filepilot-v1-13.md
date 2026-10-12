@@ -5,7 +5,24 @@ Epico: filepilot-v1 | Ordem: 13 | Pontos: 3 | Depende de: filepilot-v1-10,filepi
 O workflow gera, no windows-latest, a pasta FilePilot com o executavel em modo onedir e publica o zip como artefato do workflow.
 
 ## Contexto herdado
--
+Entregue por filepilot-v1-12 (commit 50ef965). Nao reimplementar: a aba Regras, o dialogo de regra e a confirmacao de exclusao; este item so empacota o aplicativo ja completo e nao altera `filepilot/ui`.
+
+Artefatos criados:
+- filepilot/ui/rules_tab.py - interface - exporta `RulesTab`, `RuleTableView` e `RuleTableModel`
+- filepilot/ui/rule_editor_dialog.py - interface - exporta `RuleEditorDialog` com o sinal `saved(int)`
+- filepilot/ui/main_window.py - interface (alterado) - `build_tabs` cria `RulesTab(conn)` no terceiro item
+- .abt/reviews/filepilot-v1-12.md - relatorio - veredito APROVADO com Gate UI-1 DEFERIDO
+
+Contratos:
+- O ponto de entrada do aplicativo segue em `filepilot/__main__.py`: `main() -> int` (linha 54); o `packaging/entry.py` deste item chama esse mesmo `main()`.
+- Armadilha: `.github/workflows/tests.yml` ja existe; `build.yml` e um arquivo novo ao lado dele e nao o substitui.
+- Armadilha: o repositorio nao tem `.gitignore`; `build/`, `dist/` e `*.egg-info/` gerados localmente aparecem como nao rastreados e nao devem ser commitados.
+
+Nomes decididos:
+- Os atributos publicos das abas servem aos testes: `RulesTab.mode` vale `carregando`, `vazio`, `listado` ou `erro`, e `RulesTab.message_label` mostra o texto do estado.
+
+Padroes estabelecidos:
+- Os testes de interface usam `QT_QPA_PLATFORM=offscreen` e o dublê de `QMessageBox.exec` ou `RuleEditorDialog.exec` com `monkeypatch`.
 
 ## Features
 

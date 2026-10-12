@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QMainWindow, QMessageBox, QTabWidget, QWidget
 
 from filepilot.db.connection import open_connection
 from filepilot.ui.organize_tab import OrganizeTab
+from filepilot.ui.rules_tab import RulesTab
 
 WINDOW_TITLE = "FilePilot"
 TAB_TITLES = ("Organizar", "Histórico", "Regras")
@@ -35,13 +36,14 @@ class PlaceholderTab(QWidget):
 def build_tabs(conn: sqlite3.Connection) -> list[tuple[str, QWidget]]:
     """Cria as abas na ordem Organizar, Histórico e Regras.
 
-    A aba Organizar e real e recebe a mesma conexao da janela; os itens
-    filepilot-v1-11 e filepilot-v1-12 trocam os marcadores de Histórico e
-    Regras pelas abas reais.
+    As abas Organizar e Regras sao reais e recebem a mesma conexao da janela;
+    o item filepilot-v1-11 troca o marcador de Histórico pela aba real.
     """
-    organize, *placeholders = TAB_TITLES
-    return [(organize, OrganizeTab(conn))] + [
-        (title, PlaceholderTab()) for title in placeholders
+    organize, history, rules = TAB_TITLES
+    return [
+        (organize, OrganizeTab(conn)),
+        (history, PlaceholderTab()),
+        (rules, RulesTab(conn)),
     ]
 
 
