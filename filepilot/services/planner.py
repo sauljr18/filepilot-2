@@ -15,6 +15,7 @@ from filepilot.domain.models import (
     Rule,
     ScannedFile,
 )
+from filepilot.services.scanner import resolve_folder
 
 _MESSAGES = {
     "DESTINO_FORA_DA_PASTA": "O destino fica fora da pasta escolhida.",
@@ -46,7 +47,7 @@ def _existing_names(directory: Path) -> set[str]:
 
 
 def _inside(folder: Path, destination: Path) -> bool:
-    return destination.resolve().is_relative_to(folder.resolve())
+    return resolve_folder(destination).is_relative_to(resolve_folder(folder))
 
 
 def _free_name(name: str, taken: set[str]) -> str:
