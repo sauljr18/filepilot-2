@@ -1078,3 +1078,148 @@ Item: filepilot-v1-12 (filepilot-2)
 ## §36 Aba Organizar: pasta, lista e simulacao
 
 Item: filepilot-v1-9 (filepilot-2)
+
+## 37. Correcao de quatro defeitos de desfazer, aba Organizar, instancia unica e planejamento [DELTA 2026-10-12, defeitos da main antes das proximas telas]
+
+### 37.1 Objetivo e fora de escopo
+
+Esta secao especifica a correcao de quatro defeitos que ja estao na main, vindos de `.abt/product-spec/20261012-131151/discovery-notes.md`. Cada defeito tem um item de correcao proprio e ao menos um teste automatizado que falha antes e passa depois da correcao. Nenhum dado, tabela, coluna, migracao ou contrato novo muda; so o comportamento de `undo.undo_last` (6.5), de `OrganizeTab._read_folder` (7.2), de `open_main_window` (7.1) e de `planner.build_plan` (6.2) passa a seguir o texto abaixo. Um unico texto de interface novo (37.4, E3); as demais mensagens sao as de 6 e 7.1.
+
+| Defeito | Onde | Hoje | Depois |
+|---|---|---|---|
+| E1 | `filepilot/services/undo.py:117` a `:124` e `:155` | Falha do banco depois do `UPDATE` e antes do `commit` deixa a transacao aberta; o arquivo volta ao destino, mas a linha continua `restaurado` na conexao; o segundo desfazer a pula e fecha a organizacao como `desfeita` | `rollback` antes de devolver o arquivo e antes de levantar; a linha continua `movido` e o segundo desfazer restaura o arquivo |
+| E2 | `filepilot/ui/organize_tab.py:133` a `:138` | `OSError` na leitura da pasta escapa do `except FilePilotError`; a aba fica em `carregando` com os botoes desabilitados | `OSError` vira `mode = "erro"` com a mensagem de `PASTA_ILEGIVEL`; "Escolher pasta..." e "Atualizar" voltam a funcionar |
+| E3 | `filepilot/__main__.py:43` a `:45` | `tryLock(0)` falso por qualquer motivo vira "O FilePilot já está aberto." e saida 0 | So `LockFailedError` e "ja aberto"; qualquer outro motivo mostra o erro de acesso aos dados e sai com 1 |
+| E4 | `filepilot/services/planner.py:48` a `:49` | `resolve()` em pasta ou destino com laco de atalhos levanta `RuntimeError`, que passa por `_read_folder` como erro interno | `FilePilotError("PASTA_INVALIDA")`, o mesmo tratamento de 27.2 |
+
+Fora de escopo desta secao:
+
+- As proximas telas da v1 (Historico, botao "Desfazer ultima organizacao", `OrganizeWorker`) e qualquer funcionalidade nova.
+- Refatoracoes alem das correcoes; a unica troca de nome e `scanner._resolve_folder` para `scanner.resolve_folder` (37.5).
+- Defeitos que nao estao nos quatro acima (37.6 registra achados vizinhos que NAO sao corrigidos aqui).
+- Editar ou renumerar secoes existentes e os cabecalhos `## §N`: o que muda nelas e dito aqui, com a referencia ("substitui a linha de 6.5 sobre ...").
+
+Os defeitos sao independentes: nenhum item depende de outro e a ordem de entrega e livre. E4 reaproveita o helper de 27.2 (item `filepilot-fix-1`, ja na main).
+
+### 37.2 E1: banco indisponivel no meio do desfazer
+
+Acrescenta a 6.5, sem alterar o resto: a linha "Cada status gravado e `commit` na hora" passa a valer tambem na falha, porque o desfazer encerra com a conexao sem transacao aberta. As demais regras de 6.5 ficam como estao.
+
+- Medicao feita nesta execucao (Python 3.12.3, `sqlite3`): depois de `UPDATE` sem `commit`, `conn.in_transaction` e `True`, uma leitura na MESMA conexao ve o valor novo e outra conexao ve o valor antigo; `conn.rollback()` volta tudo e `in_transaction` vira `False`.
+- Hoje: `_record_status` (`undo.py:66` a `:77`) faz `execute` e `commit`. Se o `commit` levanta `sqlite3.Error`, `_run` (`:117` a `:124`) devolve o arquivo ao destino com `os.rename` e levanta `BANCO_INDISPONIVEL`, mas nenhum `rollback` roda. A linha fica `restaurado` na transacao aberta; o arquivo esta no destino. O segundo `undo_last` na mesma conexao le `restaurado`, nao a inclui no laco (`status = 'movido'`), fecha a organizacao como `desfeita` e o arquivo continua fora do lugar. O mesmo vale para a falha do `UPDATE` final de `organizations` (`:130` a `:136`), tratada so em `undo_last` (`:155`).
+- Novo helper `_rollback(conn: sqlite3.Connection) -> None` em `filepilot/services/undo.py`: `with contextlib.suppress(sqlite3.Error): conn.rollback()`. Nunca levanta `[DECISAO: conexao fechada ou banco morto tambem levantam no rollback; o erro que sobe para quem chamou e sempre o BANCO_INDISPONIVEL original]`.
+- `_run` chama `_rollback(conn)` no `except sqlite3.Error` de `_record_status`, ANTES do `os.rename` que devolve o arquivo ao destino e antes do `raise`. `undo_last` chama `_rollback(conn)` no `except sqlite3.Error` de `_run` (`:155`), antes do `raise`, para cobrir a falha do `UPDATE` final de `organizations`.
+- Depois da falha: `conn.in_transaction` e `False`; as linhas ja gravadas com `commit` antes da falha continuam `restaurado` e seus arquivos continuam no lugar; a linha da falha continua `movido` com o arquivo no destino; a organizacao NAO e marcada `desfeita` na falha de uma operacao.
+- Segundo desfazer: `last_undoable` (6.4) ainda devolve a organizacao; `undo_last` percorre so as linhas `movido` que sobraram, restaura o arquivo da falha e fecha a organizacao como `desfeita`.
+- Falha so no `UPDATE` final de `organizations`: todas as operacoes ja estao `restaurado` e no lugar; a organizacao fica como estava; o segundo `undo_last` percorre zero linhas, devolve `restored_count == 0` e a marca `desfeita`.
+- Nao muda: `OPERATION_LOCK` e liberado pelo `finally` de `undo_last`; a mensagem de `BANCO_INDISPONIVEL`; o formato de `UndoResult`; o `os.rename` de volta continua dentro de `contextlib.suppress(OSError)`.
+- Efeitos: so o `rollback` da transacao aberta pela propria falha.
+
+Testes obrigatorios (arquivo novo `tests/services/test_undo_rollback.py`, no estilo de `tests/services/test_undo.py`; reaproveitam `_plan`, `_statuses` e as fixtures `conn` e `folder` copiando-as ou importando de `tests/services/test_undo.py`):
+
+1. `undo._record_status` trocado por `monkeypatch` por uma funcao que executa o `UPDATE` real SEM `commit` e depois levanta `sqlite3.OperationalError("disco cheio")`: `undo_last` levanta `FilePilotError` com `code == "BANCO_INDISPONIVEL"`; `conn.in_transaction` e `False`; o arquivo esta em `Documentos/a.pdf`; `_statuses` mostra `movido`.
+2. No mesmo cenario, com o `monkeypatch` desfeito, o segundo `undo_last` devolve `restored_count == 1`, o arquivo esta de volta em `folder / "a.pdf"` e `_statuses` mostra `restaurado`.
+3. Plano de 3 arquivos, falha so na segunda chamada de `_record_status` (a primeira e a real): depois do segundo `undo_last` os tres arquivos estao nos caminhos originais, os tres status sao `restaurado` e `last_undoable(conn)` devolve `None`.
+4. `TRIGGER BEFORE UPDATE ON organizations WHEN NEW.status = 'desfeita'` com `SELECT RAISE(ABORT, 'falha')`: `undo_last` levanta `BANCO_INDISPONIVEL`, `conn.in_transaction` e `False` e os arquivos estao restaurados; com o gatilho removido (`DROP TRIGGER`), o segundo `undo_last` devolve `restored_count == 0` e `last_undoable(conn)` passa a `None`.
+5. Conexao morta no meio da falha: `undo._record_status` trocado por `monkeypatch` por uma funcao que fecha a conexao (`conn.close()`) e levanta `sqlite3.OperationalError`: `undo_last` levanta `FilePilotError` com `code == "BANCO_INDISPONIVEL"`, sem levantar `ProgrammingError`, e o arquivo esta de volta em `Documentos/a.pdf` (o `rollback` suprimido nao troca o erro nem impede o `os.rename` de volta). `test_banco_fechado_levanta_banco_indisponivel` (`tests/services/test_undo.py`) continua passando, mas nao prova isso, porque a conexao fechada falha antes, em `last_undoable`.
+
+### 37.3 E2: aba Organizar presa em carregando
+
+Acrescenta a 7.2, ao lado da linha "`PASTA_VAZIA`, `PASTA_INVALIDA`, `PASTA_ILEGIVEL`: `mode = "erro"`...". O estado de erro da aba passa a cobrir tambem o erro do sistema.
+
+- Hoje: `_read_folder` (`organize_tab.py:128` a `:141`) poe `mode = "carregando"` e captura so `FilePilotError`. Um `OSError` que sobe de `scan_folder` ou de `build_plan` (por exemplo o `PermissionError` de `Path.resolve`, que 27.2 deixa subir de proposito) escapa do slot com `mode == "carregando"`. Em `carregando` (`_BUSY`, `:40`), "Escolher pasta..." e "Atualizar" ficam desabilitados (`:93` e `:94`) e "Simular" e "Organizar" tambem (`:95` e `:96`): nada na aba reabilita os botoes.
+- Novo `except OSError:` em `_read_folder`, depois do `except FilePilotError`: chama `self._show_error(FilePilotError("PASTA_ILEGIVEL", _UNREADABLE))` e devolve `None`, com a constante de modulo `_UNREADABLE = "Não foi possível ler a pasta escolhida."` (o texto de `PASTA_ILEGIVEL` em 6) `[DECISAO: o texto de 6 e repetido como constante da interface para a camada ui nao importar o dicionario privado do scanner; ha teste que compara os dois textos]`.
+- O texto bruto da excecao nunca aparece na interface; fica so na cadeia de excecoes, e nao e gravado em lugar nenhum.
+- Estado depois do erro: `mode == "erro"`; `summary` com o texto acima; `files == []`; `plan is None`; tabela vazia; "Simular" e "Organizar" desabilitados; "Escolher pasta..." habilitado; "Atualizar" habilitado (`folder` continua definido), para tentar de novo `[DECISAO: nao fechar a aba; "Atualizar" e "Escolher pasta..." sao a saida natural da aba presa]`.
+- Vale para os tres chamadores de `_read_folder` (`choose_folder` via `refresh`, `refresh` e `simulate`), porque a correcao esta no ponto unico de leitura.
+- Fora de escopo: so `OSError`. Falha do banco em `list_rules` ja vira `FilePilotError("BANCO_INDISPONIVEL")` (6.6) e e tratada pelo `except FilePilotError`; outra excecao inesperada continua com o tratamento de 6 ("Excecao fora do tratamento por arquivo").
+- Efeitos: nenhum no disco nem no banco.
+
+Testes obrigatorios (arquivo novo `tests/ui/test_organize_tab_read_error.py`, no estilo de `tests/ui/test_organize_tab_folder.py`, com `_tab`, `_pick` e a fixture `conn` copiados dele):
+
+1. `organize_tab_module.scan_folder` trocado por `monkeypatch` para levantar `PermissionError("acesso negado")`; `_pick` escolhe uma pasta; `tab.choose_folder()`: `tab.mode == "erro"`, `tab.summary.text() == "Não foi possível ler a pasta escolhida."`, `tab.table.model.rowCount() == 0`, "Simular" e "Organizar" desabilitados, "Escolher pasta..." e "Atualizar" habilitados.
+2. A mensagem nao contem `acesso negado`.
+3. Pasta listada com sucesso e depois `scan_folder` levantando `OSError`: `tab.simulate()` leva a `mode == "erro"` com o mesmo estado e `tab.files == []` e `tab.plan is None`.
+4. Recuperacao: depois do erro, com `scan_folder` de volta ao real, `tab.refresh()` leva a `mode == "listado"` com os arquivos da pasta.
+5. Caminho real sem trocar o servico: `Path.resolve` trocado por `monkeypatch` para levantar `PermissionError` so para a pasta escolhida (no estilo de `_fail_resolve_for`, `tests/services/test_scanner_loop.py:15`): `tab.choose_folder()` leva a `mode == "erro"`.
+6. O texto de `_UNREADABLE` e igual ao de `PASTA_ILEGIVEL` em `scanner._MESSAGES`.
+
+### 37.4 E3: instancia unica sem fechar em silencio
+
+Substitui, em 7.1, a frase "Se falhar (outra instancia aberta), mostra `QMessageBox.information` com "O FilePilot já está aberto." e encerra com codigo 0". O resto do item de instancia unica de 7.1 fica como esta.
+
+- Hoje: `open_main_window` (`__main__.py:43` a `:45`) trata todo `tryLock(0)` falso como "outra instancia aberta". O `QLockFile` tambem devolve falso quando nao consegue ler ou criar o arquivo de trava; `lock.error()` distingue: `LockFailedError` (outro processo segura a trava), `PermissionError` (a pasta de dados ou o arquivo de trava nao podem ser acessados pela pessoa) e `UnknownError` (outra falha, como disco cheio).
+- Novo comportamento, depois de `tryLock(0)` falso, lendo `lock.error()` uma unica vez:
+  - `QLockFile.LockError.LockFailedError`: o de hoje (`QMessageBox.information` com "O FilePilot já está aberto." e retorno `0`).
+  - Qualquer outro valor (`PermissionError`, `UnknownError` e o inesperado `NoError`): `QMessageBox.critical(None, APP_NAME, _LOCK_UNAVAILABLE)` e retorno `1`, com a constante de modulo `_LOCK_UNAVAILABLE = "Não foi possível verificar se o FilePilot já está aberto. Confira se você tem permissão para usar a pasta de dados do aplicativo."` `[DECISAO: aprovada no enriquecimento; sugestao 2]`.
+  - O texto do banco ("Não foi possível acessar o histórico do FilePilot.") e o da falha de `mkdir` de `__main__.py:38` a `:40` ficam como estao.
+- Nos dois casos: nao cria `MainWindow` e nao abre nem cria o banco; nao ha `lock.unlock()`, porque a trava nao foi tomada.
+- Nao muda: o `mkdir` da pasta de dados; o tempo de trava velha (`STALE_LOCK_TIME_MS`); a liberacao da trava em `closeEvent`; o codigo `1` e a mensagem da falha de `open_connection`.
+- Efeitos: so a mensagem exibida e o codigo de saida.
+
+Testes obrigatorios (arquivo novo `tests/ui/test_single_instance_unknown.py`, no estilo de `tests/ui/test_single_instance.py`, com `_forbid_window` e um espiao de `QMessageBox.critical` alem do de `information`):
+
+1. `app_main.QLockFile` trocado por `monkeypatch` por uma classe falsa com `setStaleLockTime`, `tryLock` que devolve `False`, `error` que devolve `QLockFile.LockError.PermissionError` e `unlock`: `open_main_window(tmp_path)` devolve `1`, `critical` recebe "Não foi possível verificar se o FilePilot já está aberto. Confira se você tem permissão para usar a pasta de dados do aplicativo." e `information` nao e chamado.
+2. O mesmo com `QLockFile.LockError.UnknownError`: `1` e `critical` com o mesmo texto.
+3. Nos casos 1 e 2: a janela nao e criada (`_forbid_window`) e `(tmp_path / "filepilot.db")` nao existe.
+4. Regressao com a classe falsa devolvendo `LockFailedError`: `0`, `information` com "O FilePilot já está aberto." e `critical` nao chamado.
+5. Pasta de dados sem permissao de escrita (`chmod 0o500`) com a trava real: `open_main_window` devolve `1` e `critical` e chamado com o texto de `_LOCK_UNAVAILABLE`; `pytest.skip` no Windows e quando a permissao e ignorada (por exemplo sob `root`), o que o teste verifica antes: uma `QLockFile` de teste na mesma pasta com `tryLock(0)` verdadeiro, depois liberada com `unlock()`. O `chmod` e desfeito num `finally`.
+6. Os testes existentes de `tests/ui/test_single_instance.py` continuam passando sem alteracao.
+
+### 37.5 E4: planejamento com laco de atalhos
+
+Acrescenta a 6.2, ao lado do erro `DESTINO_FORA_DA_PASTA`, e faz o planejamento seguir o tratamento de laco de 27.2. As demais regras de 6.2 ficam como estao.
+
+- Medicao feita nesta execucao (Python 3.12.3, Linux): com `Documentos -> Documentos` (laco de um link), `(pasta / "Documentos" / "a.pdf").resolve()` e `pasta.joinpath("Documentos").resolve()` levantam `RuntimeError("Symlink loop ...")`.
+- Hoje: `_inside` (`planner.py:48` a `:49`) chama `destination.resolve()` e `folder.resolve()` sem tratamento; `build_plan` chama `_inside` em `:76` e `:85`. O `RuntimeError` sobe ate a aba, que so captura `FilePilotError`: vira erro interno.
+- `scanner._resolve_folder` (`scanner.py:52`) passa a se chamar `resolve_folder`, publica, com o mesmo corpo e o mesmo comportamento de 27.2: `RuntimeError`, `OSError` com `errno.ELOOP` e `OSError` com `winerror` 1921 viram `FilePilotError("PASTA_INVALIDA", <mensagem de 6>)`, com `raise ... from exc`; qualquer outro `OSError` continua subindo. A chamada em `scan_folder` (`:115`) usa o novo nome. Nenhum teste existente cita o nome antigo.
+- `planner._inside` passa a ser `resolve_folder(destination).is_relative_to(resolve_folder(folder))`, com `from filepilot.services.scanner import resolve_folder`; nao ha ciclo de importacao, porque `scanner` nao importa `planner`.
+- So o destino de arquivo que tem categoria ou regra e resolvido (`build_plan` ja pula `skipped` antes de chamar `_inside`): laco de atalhos em subpasta de destino que nenhum arquivo usa NAO impede o plano `[DECISAO: aprovada no enriquecimento; sugestao 1]`.
+- Resultado: `build_plan` levanta `FilePilotError("PASTA_INVALIDA", "A pasta escolhida não existe ou não é uma pasta.")` quando a pasta escolhida ou o destino de qualquer arquivo atravessa um laco de atalhos. Nenhum plano e devolvido e nada e criado no disco `[DECISAO: mesmo codigo e mesma mensagem de 27.2, como pede o enunciado ("o mesmo defeito da leitura da pasta"); nenhum texto novo]`.
+- A mensagem e sempre o texto fixo de 6, nunca o da excecao original.
+- Um destino que sai da pasta continua `DESTINO_FORA_DA_PASTA`; o laco vence a comparacao so quando a resolucao falha.
+- Na interface o erro cai no `except FilePilotError` de `_read_folder`: `mode = "erro"` com a mensagem de `PASTA_INVALIDA` (7.2).
+- Efeitos: nenhum; so le o disco.
+
+Testes obrigatorios (arquivo novo `tests/services/test_planner_loop.py`, no estilo de `tests/services/test_planner_guard.py` e `tests/services/test_scanner_loop.py`):
+
+1. `Path.resolve` trocado por `monkeypatch` para levantar `RuntimeError("Symlink loop")` so para o caminho de destino: `build_plan(folder, [a.pdf], [])` levanta `FilePilotError` com `code == "PASTA_INVALIDA"`, `message` igual ao texto de 6 e sem `Symlink loop` nele.
+2. O mesmo com `OSError` de `errno.ELOOP`: `PASTA_INVALIDA`.
+3. `OSError` de `errno.EACCES` na resolucao NAO vira `PASTA_INVALIDA`: continua `OSError`.
+4. Laco real, `folder / "Documentos"` apontando para si mesmo com `Path.symlink_to`, com `pytest.skip` se o sistema recusar criar o link (`OSError` ou `NotImplementedError`): `PASTA_INVALIDA`, e a arvore da pasta fica identica.
+5. Regressao: o destino fora da pasta continua `DESTINO_FORA_DA_PASTA` e a pasta sem laco continua devolvendo o plano (`tests/services/test_planner_guard.py` sem alteracao).
+6. Interface (arquivo novo `tests/ui/test_organize_tab_plan_loop.py`, proprio de E4, no estilo de `tests/ui/test_organize_tab_folder.py` com `_tab`, `_pick`, `_folder_with` e a fixture `conn` copiados dele, para E4 nao depender dos testes de E2): pasta com `a.pdf` e `Path.resolve` trocado por `monkeypatch` para levantar `RuntimeError("Symlink loop")` so para `folder / "Documentos" / "a.pdf"`: `OrganizeTab.choose_folder()` leva a `mode == "erro"` com o resumo "A pasta escolhida não existe ou não é uma pasta."
+7. Regressao dos testes de `tests/services/test_scanner_loop.py`, que continuam passando com o helper renomeado.
+8. Laco real em subpasta que nenhum arquivo usa: pasta com `a.pdf` e `folder / "Imagens"` apontando para si mesma (`Path.symlink_to`, com `pytest.skip` se o sistema recusar o link): `build_plan` devolve o plano com a operacao do PDF para `Documentos` e sem erro.
+
+### 37.6 Pendencias para decisao
+
+Nenhuma decisao pendente nesta secao.
+
+Registro fora de escopo (nao e decisao pendente):
+
+1. Falha do `os.rename` de volta em E1. Se o `os.rename` que devolve o arquivo ao destino falha (`OSError`, suprimido em `undo.py:122`), o arquivo fica em `source_path` e a linha continua `movido`; o segundo desfazer a marca `nao_restaurado` ("arquivo não está mais no destino"). Nao e o defeito pedido (nao marca `restaurado`) e NAO e corrigido aqui `[DECISAO: fora do escopo; registrado para nao se perder]`.
+2. Excecao que nao e `OSError` na leitura da pasta (E2) segue o tratamento de 6 para excecao inesperada; nao e tratada nesta secao.
+3. A mensagem de `PASTA_INVALIDA` por laco no destino (E4) diz "A pasta escolhida não existe ou não é uma pasta." mesmo quando o laco esta numa subpasta de destino dentro de uma pasta valida; um texto novo e mais preciso fica para uma decisao de produto `[DECISAO: nenhum texto novo para PASTA_INVALIDA nesta secao]`.
+4. Laco de atalhos no desfazer. `undo._is_inside` (`undo.py:46` a `:47`) e `undo._remove_empty_folders` (`undo.py:93`) chamam `resolve()` sem tratar o laco e levantariam `RuntimeError`. Nao e um dos quatro defeitos e NAO e corrigido aqui `[DECISAO: aprovada no enriquecimento; recusada a sugestao 3, so os quatro defeitos pedidos]`.
+
+### 37.7 Traceability Matrix
+
+| Item do escopo | Elementos da SPEC | Status | Origem |
+|---|---|---|---|
+| F1: banco indisponivel no meio do desfazer desfaz o que abriu e o segundo desfazer nao marca como restaurado arquivo fora do lugar | 37.2; acrescenta a 6.5 | coberto | discovery-notes.md |
+| F2: leitura da pasta com erro do sistema na aba Organizar nao deixa a aba presa em carregando | 37.3; acrescenta a 7.2 | coberto | discovery-notes.md |
+| F3: sem saber se ha outra janela aberta o programa avisa em vez de fechar em silencio | 37.4; substitui a frase de instancia unica de 7.1 | coberto | discovery-notes.md |
+| F4: planejamento com laco de atalho nao quebra com erro interno | 37.5; acrescenta a 6.2 e reaproveita 27.2 | coberto | discovery-notes.md |
+| F5: um item de correcao com ao menos um teste por defeito | 37.2 a 37.5 (testes obrigatorios) | coberto | discovery-notes.md |
+| Fora de escopo: proximas telas, novas funcionalidades, refatoracoes alem das correcoes, outros defeitos | 37.1; 37.6 | coberto | discovery-notes.md |
+| Metrica: 4 defeitos corrigidos, 4 testes novos passando e nenhum teste existente quebrado | 37.2 a 37.5; comando unico de mypy de 19.2 | coberto | discovery-notes.md |
+| - | 37.2 `rollback` sem propagar erro, antes do `os.rename` e antes do `raise` | - | `[DECISAO: o erro que sobe e sempre o BANCO_INDISPONIVEL original]` |
+| - | 37.3 so `OSError` vira `PASTA_ILEGIVEL`; texto de 6 como constante da interface | - | `[DECISAO: repetir o texto evita importar dicionario privado do scanner; teste compara os dois]` |
+| - | 37.3 "Atualizar" e "Escolher pasta..." habilitados no estado de erro | - | `[DECISAO: e a saida natural da aba presa]` |
+| - | 37.4 qualquer motivo diferente de `LockFailedError` mostra o erro de acesso e sai com 1 | - | `[DECISAO: nao saber se ha outra janela e falha de acesso aos dados, como a falha de mkdir]` |
+| - | 37.4 texto proprio `_LOCK_UNAVAILABLE` para essa falha | - | `[DECISAO: aprovada no enriquecimento; sugestao 2]` |
+| - | 37.5 so o destino de arquivo com categoria ou regra e resolvido; laco em subpasta nao usada nao impede o plano | - | `[DECISAO: aprovada no enriquecimento; sugestao 1]` |
+| - | 37.6 laco de atalhos no desfazer registrado fora de escopo | - | `[DECISAO: aprovada no enriquecimento; recusada a sugestao 3]` |
+| - | 37.5 `resolve_folder` publico, usado por scanner e planner | - | `[DECISAO: um unico ponto de conversao do laco, sem duplicar a regra de errno e winerror]` |
+| - | 37.5 laco no planejamento vira `PASTA_INVALIDA` com a mensagem de 6 | - | `[DECISAO: mesmo tratamento de 27.2, como pede o enunciado]` |
