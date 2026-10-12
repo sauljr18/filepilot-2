@@ -77,6 +77,16 @@ def _record_status(
     conn.commit()
 
 
+def _rollback(conn: sqlite3.Connection) -> None:
+    """Descarta a transacao aberta pela falha; nunca levanta (SPEC 37.2).
+
+    Com a conexao fechada ou o banco morto o proprio `rollback` falha: o erro
+    que sobe para quem chamou continua sendo o `BANCO_INDISPONIVEL` original.
+    """
+    with contextlib.suppress(sqlite3.Error):
+        conn.rollback()
+
+
 def _remove_empty_folders(folder: Path, destinations: list[Path]) -> list[str]:
     """Remove as pastas de destino vazias, subindo ate a pasta escolhida (6.5).
 
@@ -117,6 +127,8 @@ def _run(conn: sqlite3.Connection, organization_id: int, folder: Path) -> UndoRe
         try:
             _record_status(conn, operation_id, status, reason)
         except sqlite3.Error as exc:
+            # Sem rollback a linha ficaria "restaurado" na transacao aberta.
+            _rollback(conn)
             if reason is None:
                 # Sem registro o arquivo ficaria "movido" fora do destino.
                 with contextlib.suppress(OSError):
@@ -153,6 +165,8 @@ def undo_last(conn: sqlite3.Connection) -> UndoResult:
         try:
             return _run(conn, last.id, Path(last.folder_path))
         except sqlite3.Error as exc:
+            # Cobre a falha do UPDATE final de organizations (SPEC 37.2).
+            _rollback(conn)
             raise _error("BANCO_INDISPONIVEL") from exc
     finally:
         OPERATION_LOCK.release()
