@@ -5,7 +5,31 @@ Epico: filepilot-v1 | Ordem: 12 | Pontos: 5 | Depende de: filepilot-v1-3,filepil
 A aba Regras permite criar, editar, excluir com confirmacao e reordenar regras pelo dialogo, com a mensagem exata por campo invalido.
 
 ## Contexto herdado
--
+Entregue por filepilot-v1-3 (commit 7dfc71c). Nao reimplementar: o servico de regras (CRUD, validacao por campo, normalizacao de extensoes, reordenacao sem lacuna e transacao unica por gravacao) e os testes de `tests/services`. A aba chama o servico; nao repete validacao nem renumeracao.
+
+Artefatos criados:
+- filepilot/services/rules.py - servico - exporta `list_rules`, `create_rule`, `update_rule`, `delete_rule` e `move_rule`
+- tests/services/test_rules.py - testes - criar, listar e validacao por campo
+- tests/services/test_rules_order.py - testes - editar, excluir e reordenar
+- tests/services/test_rules_storage.py - testes - extensoes em `rule_extensions`, historico preservado e desfazer em falha
+- .abt/reviews/filepilot-v1-3.md - relatorio - veredito APROVADO da Rita
+
+Contratos:
+- Todas as funcoes de `filepilot/services/rules.py` recebem `conn: sqlite3.Connection` primeiro (a de `open_connection`, em filepilot/db/connection.py). `list_rules(conn) -> list[Rule]` por `position` crescente; `create_rule(conn, name, extensions: list[str], destination_folder) -> Rule` (entra na ultima posicao); `update_rule(conn, rule_id, name, extensions, destination_folder) -> Rule` (mantem a `position`); `delete_rule(conn, rule_id) -> None`; `move_rule(conn, rule_id, new_position) -> list[Rule]` ja reordenada.
+- `Rule` (filepilot/domain/models.py): `id`, `name`, `destination_folder`, `position`, `extensions: frozenset[str]` (sem ordem; a aba ordena para exibir).
+- Erros (`FilePilotError` com `code`, `message` e `fields`): `REGRA_INVALIDA` traz `fields` por campo com chaves `name`, `extensions` e `destination_folder` (e `position` no `move_rule`) e o texto exato de 6.6, pronto para exibir no dialogo; `REGRA_NAO_ENCONTRADA` (id inexistente); `BANCO_INDISPONIVEL`. Todos os campos invalidos vem juntos em um so erro.
+- Armadilha: cada gravacao abre a propria transacao com `BEGIN`; `conn` nao pode chegar com transacao aberta (o `BEGIN` falharia e viraria `BANCO_INDISPONIVEL`). O servico ja faz commit: a aba nao chama `conn.commit()`.
+- Armadilha: o servico devolve o nome ja sem espacos nas pontas e as extensoes normalizadas; o dialogo deve reexibir o valor devolvido, nao o digitado. `move_rule` fora de 1 ate o total levanta `REGRA_INVALIDA`: a aba desabilita "Subir" e "Descer" nos extremos para nunca chegar a esse caso.
+- Achados abertos do relatorio da Rita, que nao bloqueiam: destino com caractere de controle e aceito, `con.txt` e aceito (a SPEC reserva so o nome exato) e `BEGIN` deferido pode colidir em `UNIQUE (position)` com dois escritores (a instancia unica de filepilot-v1-8 mitiga).
+
+Nomes decididos:
+- Os helpers privados de rules.py sao `_validate`, `_transaction`, `_renumber`, `_normalize_extensions` e `_current_position`; os textos de erro ficam em `_MESSAGES` e `_FIELD_MESSAGES` do proprio modulo.
+- A fixture `conn` dos testes de regras abre `open_connection(tmp_path / "filepilot.db")` e fecha ao fim.
+
+Padroes estabelecidos:
+- O servico levanta `FilePilotError` pelo helper `_error(code, fields=None)`, com `message` do dicionario do proprio modulo (mesmo padrao de scanner.py).
+- Falha de gravacao e simulada em teste com `monkeypatch` de `rules._normalize_extensions`, forcando uma extensao que o `CHECK` do banco recusa.
+- Reordenar usa duas etapas na mesma transacao: `position = -position` e depois a posicao final, por causa do `UNIQUE (position)`.
 
 ## Features
 
