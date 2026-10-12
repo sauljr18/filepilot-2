@@ -881,3 +881,7 @@ Item: filepilot-mypy-win32-2 (filepilot-2)
 ## §23 Leitura da pasta e pastas protegidas
 
 Item: filepilot-v1-2 (filepilot-2)
+
+## §24 Servico de regras personalizadas
+
+Item: filepilot-v1-3 (filepilot-2)
