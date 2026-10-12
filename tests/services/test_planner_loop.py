@@ -97,6 +97,12 @@ def test_laco_real_no_destino_vira_pasta_invalida_e_a_arvore_fica_identica(
 ) -> None:
     folder = _folder_with_pdf(tmp_path)
     _symlink(folder / "Documentos", folder / "Documentos")
+    try:
+        (folder / "Documentos" / "a.pdf").resolve()
+    except (RuntimeError, OSError):
+        pass
+    else:
+        pytest.skip("Path.resolve nao detecta o laco nesta plataforma")
     before = _tree(folder)
 
     with pytest.raises(FilePilotError) as info:
