@@ -1239,3 +1239,7 @@ Item: filepilot-fix2-3 (filepilot-2)
 ## §41 Planejamento com laco de atalhos vira PASTA_INVALIDA
 
 Item: filepilot-fix2-4 (filepilot-2)
+
+## §42 Aba Organizar: execucao com barra de progresso
+
+Item: filepilot-v1-10 (filepilot-2)
