@@ -7,7 +7,22 @@ SystemRoot, ProgramFiles e ProgramFiles(x86) definidas como vazias, ou so com es
 
 ## Contexto herdado
 
--
+Entregue por filepilot-fix-1 (commit 2d6bd08):
+
+Artefatos criados:
+- filepilot/services/scanner.py - alterado - `_resolve_folder(folder: Path) -> Path` (converte laco de atalhos em PASTA_INVALIDA) e `_is_protected(folder: Path, resolved: Path) -> bool` (recebe o caminho ja resolvido); constante `_WINERROR_CANT_RESOLVE = 1921`
+- tests/services/test_scanner_loop.py - novo - testes do laco de atalhos (monkeypatch de `Path.resolve`, ELOOP, EACCES, laco real, link `up -> ..`)
+
+Contratos:
+- `scan_folder` em filepilot/services/scanner.py: ordem (1) caminho de rede `\\` sem resolver, (2) `_resolve_folder`, (3) `_is_protected(folder, resolved)`, (4) `folder.is_dir()`, (5) listagem. Armadilha: `_is_protected` nao chama mais `folder.resolve()`; o laco de variaveis de ambiente (`Path(os.environ.get(variable, default)).resolve()`) continua dentro dele e e o ponto do item atual.
+
+Nomes decididos:
+- `_resolve_folder` e o unico ponto que resolve a pasta escolhida; so o laco de atalhos vira PASTA_INVALIDA, outro OSError (como EACCES) continua subindo.
+
+Padroes estabelecidos:
+- Teste que troca `Path.resolve` por monkeypatch guarda o original (`_original_resolve`) e o chama para qualquer outro caminho, porque o fixture `tmp_path` tambem usa `resolve`.
+
+filepilot-fix-1 ja entregou a conversao do laco de atalhos: NAO reimplementar `_resolve_folder` nem mexer na mensagem de PASTA_INVALIDA.
 
 ## Features
 
