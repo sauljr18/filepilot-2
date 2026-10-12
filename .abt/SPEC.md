@@ -873,3 +873,7 @@ Item: filepilot-mypy-1 (filepilot-2)
 ## §21 Comando unico de mypy nos itens filepilot-v1-2 a 13
 
 Item: filepilot-mypy-win32-1 (filepilot-2)
+
+## §22 Passo de mypy do workflow com comando unico
+
+Item: filepilot-mypy-win32-2 (filepilot-2)
