@@ -1062,3 +1062,7 @@ Item: filepilot-fix-3 (filepilot-2)
 ## §32 Organizacao interrompida e recuperacao ao abrir o banco
 
 Item: filepilot-fix-4 (filepilot-2)
+
+## §33 Historico e desfazer a ultima organizacao
+
+Item: filepilot-v1-7 (filepilot-2)
