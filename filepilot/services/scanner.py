@@ -1,6 +1,7 @@
 """Leitura do nivel da pasta escolhida (SPEC 6.1)."""
 
 import ctypes
+import errno
 import os
 import stat
 import sys
@@ -28,6 +29,9 @@ _PROTECTED_ENV = (
 _DRIVE_REMOTE = 4
 _DRIVE_UNKNOWN = 0
 
+# ERROR_CANT_RESOLVE_FILENAME: laco de atalhos no Windows.
+_WINERROR_CANT_RESOLVE = 1921
+
 
 def _error(code: str) -> FilePilotError:
     return FilePilotError(code, _MESSAGES[code])
@@ -45,11 +49,22 @@ def _drive_type(anchor: str) -> int:
     return int(ctypes.windll.kernel32.GetDriveTypeW(anchor))
 
 
-def _is_protected(folder: Path) -> bool:
+def _resolve_folder(folder: Path) -> Path:
+    """Resolve a pasta uma unica vez; laco de atalhos vira PASTA_INVALIDA (27.2)."""
+    try:
+        return folder.resolve()
+    except RuntimeError as exc:
+        raise _error("PASTA_INVALIDA") from exc
+    except OSError as exc:
+        if exc.errno == errno.ELOOP or getattr(exc, "winerror", None) == _WINERROR_CANT_RESOLVE:
+            raise _error("PASTA_INVALIDA") from exc
+        raise
+
+
+def _is_protected(folder: Path, resolved: Path) -> bool:
     """Raiz de unidade, pasta do sistema ou de programas (ou dentro delas) e pasta de rede."""
     if str(folder).startswith("\\\\"):
         return True
-    resolved = folder.resolve()
     if resolved == Path(resolved.anchor):
         return True
     for variable, default in _PROTECTED_ENV:
@@ -87,7 +102,10 @@ def _scan_entry(path: Path) -> ScannedFile | None:
 
 def scan_folder(folder: Path) -> list[ScannedFile]:
     """Lista os arquivos elegiveis do nivel da pasta, ordenados por nome (6.1)."""
-    if _is_protected(folder):
+    if str(folder).startswith("\\\\"):
+        raise _error("PASTA_PROTEGIDA")
+    resolved = _resolve_folder(folder)
+    if _is_protected(folder, resolved):
         raise _error("PASTA_PROTEGIDA")
     if not folder.is_dir():
         raise _error("PASTA_INVALIDA")
