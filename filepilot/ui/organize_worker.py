@@ -12,6 +12,7 @@ from PySide6.QtCore import QObject, Qt, QThread, Signal, Slot
 from filepilot.db.connection import open_connection
 from filepilot.domain.models import Plan
 from filepilot.services.organizer import internal_error, organize
+from filepilot.services.undo import undo_last
 
 
 class OrganizeWorker(QObject):
@@ -43,7 +44,37 @@ class OrganizeWorker(QObject):
         self.finished.emit(result)
 
 
-def run_in_thread(worker: OrganizeWorker) -> QThread:
+class UndoWorker(QObject):
+    """Desfaz a ultima organizacao fora da thread da interface (SPEC 7.2).
+
+    Abre a propria conexao pelo mesmo motivo do `OrganizeWorker`. `undo_last`
+    pega o `OPERATION_LOCK` sem bloquear e levanta `ORGANIZACAO_EM_ANDAMENTO`.
+    """
+
+    finished = Signal(object)
+    failed = Signal(str, str)
+
+    def __init__(self, db_path: Path) -> None:
+        super().__init__()
+        self._db_path = db_path
+
+    @Slot()
+    def run(self) -> None:
+        """Desfaz; termina sempre com `finished` ou com `failed`."""
+        try:
+            conn = open_connection(self._db_path)
+            try:
+                result = undo_last(conn)
+            finally:
+                conn.close()
+        except Exception as exc:
+            error = internal_error(exc)
+            self.failed.emit(error.code, error.message)
+            return
+        self.finished.emit(result)
+
+
+def run_in_thread(worker: OrganizeWorker | UndoWorker) -> QThread:
     """Move o worker para uma `QThread` nova, inicia e devolve a thread.
 
     A thread termina sozinha quando o worker emite `finished` ou `failed`: o
