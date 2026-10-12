@@ -1231,3 +1231,7 @@ Item: filepilot-fix2-1 (filepilot-2)
 ## §39 Aba Organizar sai de carregando quando a leitura da pasta falha com erro do sistema
 
 Item: filepilot-fix2-2 (filepilot-2)
+
+## §40 Instancia unica avisa quando nao consegue saber se ha outra janela aberta
+
+Item: filepilot-fix2-3 (filepilot-2)
