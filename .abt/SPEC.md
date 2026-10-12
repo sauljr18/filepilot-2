@@ -1054,3 +1054,7 @@ Item: filepilot-fix-1 (filepilot-2)
 ## §30 Variavel de ambiente vazia nao torna a pasta atual protegida
 
 Item: filepilot-fix-2 (filepilot-2)
+
+## §31 Ordem estavel da lista de arquivos com nomes que so diferem por maiuscula
+
+Item: filepilot-fix-3 (filepilot-2)
