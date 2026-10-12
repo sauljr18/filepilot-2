@@ -1046,3 +1046,7 @@ Registro fora de escopo (nao e decisao pendente):
 ## §28 Verificacoes de destino e textos de falha
 
 Item: filepilot-v1-6 (filepilot-2)
+
+## §29 Laco de atalhos na leitura da pasta vira PASTA_INVALIDA
+
+Item: filepilot-fix-1 (filepilot-2)
