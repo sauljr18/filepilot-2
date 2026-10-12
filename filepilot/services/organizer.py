@@ -102,10 +102,34 @@ def _open_organization(conn: sqlite3.Connection, folder: Path) -> int:
         )
         conn.commit()
     except sqlite3.Error as exc:
+        # Ainda nao ha linha confirmada: so desfaz a insercao pendente.
+        with contextlib.suppress(sqlite3.Error):
+            conn.rollback()
         raise _error("BANCO_INDISPONIVEL") from exc
     if cursor.lastrowid is None:
         raise _error("BANCO_INDISPONIVEL")
     return cursor.lastrowid
+
+
+def _interrupt_organization(
+    conn: sqlite3.Connection, organization_id: int, result: OrganizationResult
+) -> None:
+    """Marca a organizacao como interrompida (6.3); nunca levanta.
+
+    Se o banco continuar indisponivel a linha fica como esta e a recuperacao
+    ao abrir o banco a corrige. O UPDATE leva AND status = em_andamento: so uma
+    linha ainda em andamento e marcada, as demais ficam intactas.
+    """
+    with contextlib.suppress(sqlite3.Error):
+        conn.rollback()
+        now = _utc_now()
+        conn.execute(
+            "UPDATE organizations SET finished_at = ?, status = 'interrompida', "
+            "moved_count = ?, failed_count = ?, updated_at = ? "
+            "WHERE id = ? AND status = 'em_andamento'",
+            (now, result.moved_count, result.failed_count, now, organization_id),
+        )
+        conn.commit()
 
 
 def _record_operation(
@@ -148,6 +172,7 @@ def _close_organization(
         )
         conn.commit()
     except sqlite3.Error as exc:
+        _interrupt_organization(conn, organization_id, result)
         raise _error("BANCO_INDISPONIVEL") from exc
 
 
@@ -173,6 +198,7 @@ def _run(
                 # Sem registro o desfazer nao acharia o arquivo: devolve ao lugar.
                 with contextlib.suppress(OSError):
                     os.rename(destination, operation.source_path)
+            _interrupt_organization(conn, organization_id, result)
             raise _error("BANCO_INDISPONIVEL") from exc
         if message is None:
             result.moved_count += 1
