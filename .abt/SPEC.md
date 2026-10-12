@@ -1223,3 +1223,7 @@ Registro fora de escopo (nao e decisao pendente):
 | - | 37.6 laco de atalhos no desfazer registrado fora de escopo | - | `[DECISAO: aprovada no enriquecimento; recusada a sugestao 3]` |
 | - | 37.5 `resolve_folder` publico, usado por scanner e planner | - | `[DECISAO: um unico ponto de conversao do laco, sem duplicar a regra de errno e winerror]` |
 | - | 37.5 laco no planejamento vira `PASTA_INVALIDA` com a mensagem de 6 | - | `[DECISAO: mesmo tratamento de 27.2, como pede o enunciado]` |
+
+## §38 Desfazer com banco indisponivel faz rollback e permite novo desfazer
+
+Item: filepilot-fix2-1 (filepilot-2)
