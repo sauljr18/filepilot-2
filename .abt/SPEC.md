@@ -1227,3 +1227,7 @@ Registro fora de escopo (nao e decisao pendente):
 ## §38 Desfazer com banco indisponivel faz rollback e permite novo desfazer
 
 Item: filepilot-fix2-1 (filepilot-2)
+
+## §39 Aba Organizar sai de carregando quando a leitura da pasta falha com erro do sistema
+
+Item: filepilot-fix2-2 (filepilot-2)
