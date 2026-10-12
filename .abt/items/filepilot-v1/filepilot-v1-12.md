@@ -31,6 +31,17 @@ Padroes estabelecidos:
 - Falha de gravacao e simulada em teste com `monkeypatch` de `rules._normalize_extensions`, forcando uma extensao que o `CHECK` do banco recusa.
 - Reordenar usa duas etapas na mesma transacao: `position = -position` e depois a posicao final, por causa do `UNIQUE (position)`.
 
+Entregue por filepilot-v1-8 (commit e0c61a3). Nao reimplementar: a janela principal, a instancia unica e o bloqueio de fechamento. A aba Regras entra no lugar do marcador.
+
+Artefatos criados:
+- filepilot/__main__.py - ponto de entrada - exporta `main` e `open_main_window(data_dir) -> MainWindow | int`
+- filepilot/ui/main_window.py - interface - exporta `MainWindow`, `build_tabs`, `PlaceholderTab`, `Reloadable` e `TAB_TITLES`
+
+Contratos:
+- `build_tabs(conn: sqlite3.Connection) -> list[tuple[str, QWidget]]` devolve `(titulo, widget)` na ordem "Organizar", "Histórico", "Regras"; trocar o marcador de "Regras" e trocar o widget do terceiro item por `RulesTab(conn)`.
+- `Reloadable` e um `Protocol` com `reload() -> None`; `MainWindow` chama `reload()` na aba de indice 1 ou 2 em `currentChanged`. `RulesTab` implementa `reload()` e recarrega com `list_rules(conn)`.
+- Armadilha: `MainWindow.conn` e unica e e a mesma entregue a `build_tabs`; a aba Regras nao abre nem fecha conexao propria.
+
 ## Features
 
 ### filepilot-v1-12-f1 RulesTab com a lista de regras e os botoes
