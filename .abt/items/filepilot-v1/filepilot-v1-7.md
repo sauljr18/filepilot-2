@@ -19,7 +19,7 @@ Criterios de aceite:
 - `page` menor que 1 vira 1 e `page_size` fora de 1 a 200 vira 50.
 - `get_organization_detail` devolve as operacoes por `seq` crescente e lista vazia para `organization_id` inexistente.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: pytest tests/services/test_history.py -> exit 0
 - parser: python -m py_compile filepilot/services/history.py -> exit 0
 - grep deve casar: page_size em filepilot/services/history.py
@@ -38,7 +38,7 @@ Criterios de aceite:
 - Nao ha retrocesso: se a ultima nao e desfazivel, uma anterior desfazivel nao e devolvida.
 - Ao abrir o banco, toda linha `em_andamento` vira `interrompida`.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: pytest tests/services/test_last_undoable.py -> exit 0
 - grep deve casar: interrompida em filepilot/db/connection.py
 Dicas:
@@ -56,7 +56,7 @@ Criterios de aceite:
 - Arquivo apagado vira `nao_restaurado` com "arquivo não está mais no destino"; caminho original ocupado vira `nao_restaurado` com "caminho original ocupado"; os demais sao restaurados e nada e sobrescrito.
 - Durante uma organizacao em andamento `undo_last` levanta `ORGANIZACAO_EM_ANDAMENTO`; sem organizacao desfazivel levanta `NADA_PARA_DESFAZER`.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: pytest tests/services/test_undo.py -> exit 0
 - parser: python -m py_compile filepilot/services/undo.py -> exit 0
 - grep deve casar: OPERATION_LOCK em filepilot/services/undo.py
@@ -68,6 +68,6 @@ Dicas:
 - `OPERATION_LOCK` vem de filepilot/services/organizer.py (item filepilot-v1-5).
 
 ## Gates do item
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: pytest -> exit 0
 - awk do Passo 6 sem saida: awk 'FNR == 1 { f = 0 } { t = $0; sub(/^[ \t]+/, "", t) } t ~ /^```/ { f = !f; next } !f && /§EPIC-[a-z0-9][a-z0-9-]*-[0-9]+/ { print FILENAME ":" FNR ": " $0 }' .abt/SPEC.md .abt/items/filepilot-v1/*.md

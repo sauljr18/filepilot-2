@@ -15,7 +15,7 @@ Artefatos criados:
 - filepilot/domain/errors.py - excecao - `FilePilotError(code, message, fields=None)` com atributos `code`, `message` e `fields`
 - filepilot/db/connection.py - servico - `open_connection(db_path: Path) -> sqlite3.Connection`
 - filepilot/db/migrations.py - servico - `apply_migrations(conn)` e a lista `MIGRATIONS` com a 0001_initial
-- .github/workflows/tests.yml - CI - roda `pytest` e `mypy . --no-error-summary` no windows-latest
+- .github/workflows/tests.yml - CI - roda `pytest` e `python -m mypy --platform win32 filepilot` no windows-latest
 
 Contratos:
 - `ScannedFile` (filepilot/domain/models.py): `path: Path`, `name: str`, `extension: str` (minusculas, sem ponto, `""` se nao houver), `size_bytes: int`; dataclass imutavel (`frozen=True`). Armadilha: `scan_folder` precisa preencher `extension` ja normalizada.
@@ -27,7 +27,7 @@ Nomes decididos:
 
 Padroes estabelecidos:
 - Testes de caminho usam `tmp_path` do pytest e anotam `-> None`.
-- Todo codigo novo passa em `mypy . --no-error-summary` (configuracao padrao, sem arquivo de configuracao proprio).
+- Todo codigo novo passa em `python -m mypy --platform win32 filepilot` (configuracao padrao, sem arquivo de configuracao proprio).
 - Nenhum caractere Unicode de traco ou aspas tipograficas no codigo de `filepilot` (grep do gate).
 
 ## Features
@@ -44,7 +44,7 @@ Criterios de aceite:
 - Pasta inexistente levanta `PASTA_INVALIDA`, falha de listagem levanta `PASTA_ILEGIVEL` e pasta sem arquivos elegiveis levanta `PASTA_VAZIA`.
 - Link simbolico para arquivo nao aparece na lista; atalho `.lnk` aparece com extensao `lnk`.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: pytest tests/services/test_scanner.py -> exit 0
 - parser: python -m py_compile filepilot/services/scanner.py -> exit 0
 - grep deve casar: FILE_ATTRIBUTE_HIDDEN em filepilot/services/scanner.py
@@ -64,7 +64,7 @@ Criterios de aceite:
 - Caminho que comeca com `\\` (por exemplo `\\servidor\pasta`) e unidade de rede (`GetDriveTypeW` igual a 4, simulado) levantam `PASTA_PROTEGIDA`.
 - Fora do Windows a verificacao de unidade de rede e ignorada e os demais testes continuam passando.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: pytest tests/services/test_scanner_protected.py -> exit 0
 - parser: python -m py_compile filepilot/services/scanner.py -> exit 0
 - grep deve casar: PASTA_PROTEGIDA em filepilot/services/scanner.py
@@ -75,6 +75,6 @@ Dicas:
 - Mensagem de `PASTA_PROTEGIDA`: "Esta pasta é protegida e não pode ser organizada. Escolha outra pasta." (tabela da secao 6, L232-259).
 
 ## Gates do item
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: pytest -> exit 0
 - awk do Passo 6 sem saida: awk 'FNR == 1 { f = 0 } { t = $0; sub(/^[ \t]+/, "", t) } t ~ /^```/ { f = !f; next } !f && /§EPIC-[a-z0-9][a-z0-9-]*-[0-9]+/ { print FILENAME ":" FNR ": " $0 }' .abt/SPEC.md .abt/items/filepilot-v1/*.md

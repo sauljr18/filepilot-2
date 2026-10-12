@@ -19,7 +19,7 @@ Criterios de aceite:
 - O ponto de entrada executa o mesmo `main()` de `python -m filepilot` e nao abre console (modo janela).
 - A pasta `dist/FilePilot` inclui as bibliotecas do PySide6 como arquivos separados (decisao da stack para a licenca LGPL).
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - parser: python -m py_compile packaging/entry.py -> exit 0
 - grep deve casar: FilePilot em packaging/filepilot.spec
 - grep nao deve casar: onefile em packaging/filepilot.spec
@@ -38,7 +38,7 @@ Criterios de aceite:
 - O job inicia `dist/FilePilot/FilePilot.exe` e confirma que o processo continua rodando depois de 5 segundos, sem codigo de saida, e entao o encerra.
 - O job publica `FilePilot-windows.zip` com a pasta `dist/FilePilot` como artefato do workflow.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - grep deve casar: windows-latest em .github/workflows/build.yml
 - grep deve casar: FilePilot-windows.zip em .github/workflows/build.yml
 - grep deve casar: upload-artifact em .github/workflows/build.yml
@@ -47,6 +47,6 @@ Dicas:
 - Confirme a versao das acoes do GitHub (checkout, setup-python, upload-artifact) antes de fixa-las.
 
 ## Gates do item
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: pytest -> exit 0
 - awk do Passo 6 sem saida: awk 'FNR == 1 { f = 0 } { t = $0; sub(/^[ \t]+/, "", t) } t ~ /^```/ { f = !f; next } !f && /§EPIC-[a-z0-9][a-z0-9-]*-[0-9]+/ { print FILENAME ":" FNR ": " $0 }' .abt/SPEC.md .abt/items/filepilot-v1/*.md

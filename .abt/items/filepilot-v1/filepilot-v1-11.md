@@ -21,7 +21,7 @@ Criterios de aceite:
 - Historico vazio mostra "Nenhuma organização registrada ainda."; falha de leitura mostra a mensagem de `BANCO_INDISPONIVEL` e o botao "Tentar de novo".
 - "Anterior" fica desabilitado na pagina 1 e "Próxima" quando `page * 50` e maior ou igual a `total`.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: QT_QPA_PLATFORM=offscreen pytest tests/ui/test_history_tab.py -> exit 0
 - parser: python -m py_compile filepilot/ui/history_tab.py -> exit 0
 - grep deve casar: Nenhuma organização registrada ainda. em filepilot/ui/history_tab.py
@@ -42,7 +42,7 @@ Criterios de aceite:
 - `HistoryTab.show_organization(organization_id)` carrega a pagina que contem a organizacao, seleciona a linha e mostra os detalhes.
 - O botao "Ver detalhes" da aba Organizar so aparece com `failed_count` maior que 0, abre a aba "Histórico" com aquela organizacao selecionada e some ao escolher outra pasta, atualizar ou iniciar nova organizacao.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: QT_QPA_PLATFORM=offscreen pytest tests/ui/test_history_details.py -> exit 0
 - grep deve casar: show_organization em filepilot/ui/history_tab.py
 - grep deve casar: Carregando detalhes em filepilot/ui/history_tab.py
@@ -60,7 +60,7 @@ Criterios de aceite:
 - Ao clicar, executa `undo_last` e o resumo mostra "Desfeito: X arquivos restaurados."; com `not_restored` nao vazio acrescenta "Não restaurados: " seguido dos caminhos.
 - Depois de desfazer, o botao fica desabilitado ate a proxima organizacao e, se a pasta for a atual, ela e relida.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: QT_QPA_PLATFORM=offscreen pytest tests/ui/test_undo_button.py -> exit 0
 - grep deve casar: last_undoable em filepilot/ui/organize_tab.py
 - grep nao deve casar: -P '[\x{2010}-\x{2015}\x{2018}-\x{201F}]' em filepilot
@@ -69,6 +69,6 @@ Dicas:
 - `UndoResult` tem `restored_count`, `not_restored` e `removed_folders` (SPEC 6.5, L335-350).
 
 ## Gates do item
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: QT_QPA_PLATFORM=offscreen pytest tests/ui -> exit 0
 - awk do Passo 6 sem saida: awk 'FNR == 1 { f = 0 } { t = $0; sub(/^[ \t]+/, "", t) } t ~ /^```/ { f = !f; next } !f && /§EPIC-[a-z0-9][a-z0-9-]*-[0-9]+/ { print FILENAME ":" FNR ": " $0 }' .abt/SPEC.md .abt/items/filepilot-v1/*.md

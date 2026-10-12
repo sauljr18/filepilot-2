@@ -20,7 +20,7 @@ Criterios de aceite:
 - Destino com varios segmentos como `Trabalho/Planilhas` e valido e fica gravado como informado.
 - Extensao repetida na mesma regra e unida; extensao ja usada em outra regra e permitida.
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: pytest tests/services/test_rules.py -> exit 0
 - parser: python -m py_compile filepilot/services/rules.py -> exit 0
 - grep deve casar: Informe uma subpasta válida dentro da pasta escolhida. em filepilot/services/rules.py
@@ -40,7 +40,7 @@ Criterios de aceite:
 - `delete_rule` e `move_rule` em 4 regras mantem as posicoes de 1 a 4 sem lacuna e sem violar `UNIQUE (position)`.
 - `move_rule` com posicao fora de 1 ate o total levanta `REGRA_INVALIDA` com `fields["position"]` igual a "Posição inválida.".
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: pytest tests/services/test_rules_order.py -> exit 0
 - parser: python -m py_compile filepilot/services/rules.py -> exit 0
 - grep deve casar: position = -position em filepilot/services/rules.py
@@ -58,7 +58,7 @@ Criterios de aceite:
 - Excluir uma regra nao altera `operations.rule_name` ja gravado (teste com uma operacao de historico inserida antes).
 - Falha na gravacao das extensoes desfaz a gravacao da regra (teste com extensao invalida forcada).
 Verificacao:
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: pytest tests/services/test_rules_storage.py -> exit 0
 - grep deve casar: rule_extensions em filepilot/services/rules.py
 - grep nao deve casar: FOREIGN KEY (rule_name em filepilot/db/migrations.py
@@ -67,6 +67,6 @@ Dicas:
 - Use consultas parametrizadas (`?`), nunca concatene nome de regra em SQL (SPEC 11).
 
 ## Gates do item
-- typecheck: mypy . --no-error-summary -> exit 0
+- typecheck: python -m mypy --platform win32 filepilot -> exit 0
 - testes: pytest -> exit 0
 - awk do Passo 6 sem saida: awk 'FNR == 1 { f = 0 } { t = $0; sub(/^[ \t]+/, "", t) } t ~ /^```/ { f = !f; next } !f && /§EPIC-[a-z0-9][a-z0-9-]*-[0-9]+/ { print FILENAME ":" FNR ": " $0 }' .abt/SPEC.md .abt/items/filepilot-v1/*.md
