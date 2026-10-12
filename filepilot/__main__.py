@@ -16,6 +16,11 @@ LOCK_FILE_NAME = "filepilot.lock"
 STALE_LOCK_TIME_MS = 30_000
 _ALREADY_OPEN = "O FilePilot já está aberto."
 _DB_UNAVAILABLE = "Não foi possível acessar o histórico do FilePilot."
+_LOCK_HELD_BY_OTHER = QLockFile.LockError.LockFailedError
+_LOCK_UNAVAILABLE = (
+    "Não foi possível verificar se o FilePilot já está aberto. "
+    "Confira se você tem permissão para usar a pasta de dados do aplicativo."
+)
 
 
 def default_data_dir() -> Path:
@@ -30,8 +35,8 @@ def open_main_window(data_dir: Path) -> MainWindow | int:
     """Toma a trava de instancia unica, abre o banco e cria a janela.
 
     Devolve a janela, ou o codigo de saida quando o aplicativo nao deve abrir:
-    0 com outra instancia aberta (sem tocar no banco) e 1 com o banco
-    inacessivel.
+    0 com outra instancia aberta (sem tocar no banco) e 1 com a trava
+    inverificavel ou o banco inacessivel.
     """
     try:
         data_dir.mkdir(parents=True, exist_ok=True)
@@ -41,8 +46,11 @@ def open_main_window(data_dir: Path) -> MainWindow | int:
     lock = QLockFile(str(data_dir / LOCK_FILE_NAME))
     lock.setStaleLockTime(STALE_LOCK_TIME_MS)
     if not lock.tryLock(0):
-        QMessageBox.information(None, APP_NAME, _ALREADY_OPEN)
-        return 0
+        if lock.error() == _LOCK_HELD_BY_OTHER:
+            QMessageBox.information(None, APP_NAME, _ALREADY_OPEN)
+            return 0
+        QMessageBox.critical(None, APP_NAME, _LOCK_UNAVAILABLE)
+        return 1
     try:
         return MainWindow(data_dir / DB_FILE_NAME, lock)
     except FilePilotError:
