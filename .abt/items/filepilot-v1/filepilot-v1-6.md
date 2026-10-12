@@ -5,7 +5,32 @@ Epico: filepilot-v1 | Ordem: 6 | Pontos: 3 | Depende de: filepilot-v1-5
 A organizacao recusa caminho de destino acima de 259 caracteres e subpasta de destino que e atalho, e grava os textos amigaveis de falha por arquivo, sem nenhuma chamada proibida nos servicos.
 
 ## Contexto herdado
--
+Entregue por filepilot-v1-5 (commit c297d88). Nao reimplementar: `organize`, `simulate`, a trava, o sufixo `(n)` na execucao, a gravacao do historico e os testes de `tests/services/test_organizer*.py`. As verificacoes de 6.7 e os textos de falha desta feature JA existem dentro de `organize`: este item os move para `destination_checks.py` e os cobre com testes proprios, sem mudar o comportamento.
+
+Artefatos criados:
+- filepilot/services/organizer.py - servico - exporta `OPERATION_LOCK`, `simulate(plan: Plan) -> Plan` e `organize(plan, conn, progress_callback=None) -> OrganizationResult`
+- tests/services/test_organizer.py - testes - historico, commit imediato, plano vazio e `simulate`
+- tests/services/test_organizer_conflicts.py - testes - progresso N+1 e sufixo na execucao
+- tests/services/test_organizer_failures.py - testes - `PermissionError`, trava, `sqlite3.Error`, guarda de pasta, atalho por link simbolico e caminho longo
+- .abt/reviews/filepilot-v1-5.md - relatorio - veredito APROVADO da Rita
+
+Contratos:
+- `organize` (organizer.py:224): plano vazio devolve `OrganizationResult(0, 0, 0)` sem gravar; a trava e tomada com `acquire(blocking=False)` e solta em `finally`; `sqlite3.Error` devolve o arquivo ao lugar e levanta `BANCO_INDISPONIVEL`. `failures` e uma lista de `(nome do arquivo, motivo)`.
+- A ordem por arquivo esta em `_move_file` (organizer.py:95): caminho acima de 259, atalho em cada nivel da subpasta, `_inside`, `mkdir`, `os.rename`; cada falha devolve `(None, texto)` e o destino final vem como `(Path, None)`. O texto da falha vai para `operations.error_message`.
+- Os textos de 6.7 sao as constantes `_IN_USE`, `_NO_PERMISSION`, `_NOT_FOUND`, `_TOO_LONG`, `_SHORTCUT`, `_OUTSIDE`, `_MKDIR` e `_OTHER` (organizer.py:33-40), escolhidas por `_failure_text(exc, creating)` (organizer.py:82); `_is_shortcut` e `_has_shortcut` (organizer.py:58 e 68) fazem a checagem de link simbolico, junction e `FILE_ATTRIBUTE_REPARSE_POINT`.
+- Armadilha: no Linux `os.rename` sobrescreve em silencio, por isso `_move_file` recusa com `os.path.lexists` antes (organizer.py:115). Mantenha essa recusa ao mover o codigo.
+- Achados abertos da Rita (nao bloqueiam): depois de `BANCO_INDISPONIVEL` a conexao fica em transacao aberta, sem o `rollback` que `rules._transaction` faz (organizer.py:205-212); `_utc_now` repete o de rules.py:40; falta teste do `FileExistsError` levantado pelo `os.rename` real.
+
+Nomes decididos:
+- Os helpers de organizer.py importam `_existing_names`, `_free_name` e `_inside` do planner por decisao explicita; ao extrair para `destination_checks.py`, o import do planner nao deve voltar a ser copia de logica.
+- Os testes do organizer ficam em `tests/services/test_organizer.py` e `test_organizer_<assunto>.py` (`conflicts`, `failures`).
+
+Padroes estabelecidos:
+- Os testes criam o banco com `open_connection(tmp_path / "historico.db")` e montam o plano com `build_plan` ou, para forcar o destino, com `Plan` e `PlannedOperation` a mao.
+- Falha de gravacao no banco e simulada com um `TRIGGER ... RAISE(ABORT, ...)` em `operations`, sem mock da conexao.
+- Falha de `os.rename` e simulada com `monkeypatch.setattr(organizer.os, "rename", ...)`.
+
+O item filepilot-v1-5 entregou toda a execucao de `organize`, inclusive as verificacoes e os textos de 6.7: NAO reimplementar, so reorganizar em `destination_checks.py` e acrescentar a classificacao de `ERRO_INTERNO` e o teste de chamadas proibidas.
 
 ## Features
 
