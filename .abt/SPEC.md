@@ -1243,3 +1243,7 @@ Item: filepilot-fix2-4 (filepilot-2)
 ## §42 Aba Organizar: execucao com barra de progresso
 
 Item: filepilot-v1-10 (filepilot-2)
+
+## §43 Aba Historico e desfazer na interface
+
+Item: filepilot-v1-11 (filepilot-2)
