@@ -61,6 +61,14 @@ def _resolve_folder(folder: Path) -> Path:
         raise
 
 
+def _protected_root(variable: str, default: str) -> Path:
+    """Raiz protegida da variavel de ambiente; ausente, vazia ou so espacos vale o padrao (27.3)."""
+    value = os.environ.get(variable)
+    if value is None or value.strip() == "":
+        value = default
+    return Path(value).resolve()
+
+
 def _is_protected(folder: Path, resolved: Path) -> bool:
     """Raiz de unidade, pasta do sistema ou de programas (ou dentro delas) e pasta de rede."""
     if str(folder).startswith("\\\\"):
@@ -68,7 +76,7 @@ def _is_protected(folder: Path, resolved: Path) -> bool:
     if resolved == Path(resolved.anchor):
         return True
     for variable, default in _PROTECTED_ENV:
-        root = Path(os.environ.get(variable, default)).resolve()
+        root = _protected_root(variable, default)
         if resolved == root or root in resolved.parents:
             return True
     return _drive_type(resolved.anchor) == _DRIVE_REMOTE
