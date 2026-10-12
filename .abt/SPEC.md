@@ -801,3 +801,67 @@ Nenhuma pendencia aberta nesta secao.
 ## §18 Fundacao: projeto, dominio, banco e CI Windows
 
 Item: filepilot-v1-1 (filepilot-2)
+
+## 19. Comando unico de checagem de tipos com mypy [DELTA 2026-10-11, mypy --platform win32 em todos os itens e no GitHub Actions]
+
+### 19.1 Objetivo e fora de escopo
+
+Esta secao registra uma decisao da especificacao, vinda de `.abt/product-spec/20261011-235554/discovery-notes.md`: a checagem de tipos roda igual no Linux e no Windows, com UM unico comando de mypy, sempre com `--platform win32`, em todos os itens e no fluxo do GitHub Actions.
+
+Hoje existem duas formas do comando: `python -m mypy --platform win32 filepilot` (17.2) e `mypy . --no-error-summary` (`.github/workflows/tests.yml:22` e o campo `Verificacao:` dos itens de `.abt/items/filepilot-v1/`). Esta secao fixa a primeira como a unica.
+
+Fora de escopo desta secao: mudar codigo do produto; anotar tipos no codigo existente; criar arquivo de configuracao do mypy; mudar a versao `mypy==2.4.0` (`pyproject.toml:19`); mudar a plataforma alvo (17.3); reabrir PRD ou stack. Nenhum dado, servico ou tela muda: o modelo de dados (5), os contratos (6) e os componentes (7) ficam como estao.
+
+### 19.2 Comando unico
+
+O comando unico de checagem de tipos do FilePilot e, literalmente:
+
+```text
+python -m mypy --platform win32 filepilot
+```
+
+Regras:
+
+- Executado na raiz do repositorio, no Linux e no Windows, com a configuracao padrao do mypy e sem arquivo de configuracao proprio.
+- Saida que comeca por `Success: no issues found` e codigo de saida 0, como em 17.2. O comando nao leva `--no-error-summary`: a linha de sucesso e a evidencia da checagem.
+- Nenhum item, gate, script ou workflow usa outra forma de chamar o mypy (nem `mypy . --no-error-summary`, nem `mypy` sem `--platform win32`). Excecao unica: o detalhe de filepilot-v1-1 (`.abt/items/filepilot-v1/filepilot-v1-1.md`), ja entregue e nao editado (19.4), mantem a forma antiga como registro historico. `[DECISAO: aprovada no ponto de checagem; tirar da excecao o trecho sobre a verificacao por grep (VAG-001, opcao B)]`
+
+Substitui a parte de 17.2 que diz "NAO acrescenta mypy ao fluxo do GitHub Actions" e que chama a checagem de "comando manual de desenvolvimento": a checagem passa a ser tambem um passo do fluxo do GitHub Actions (19.3). As demais frases de 17.2 e 17.3 continuam valendo.
+
+A pasta tests/ fica fora da checagem de tipos; nenhum item, gate ou workflow a checa.
+
+`[DECISAO: aprovada no enriquecimento; diverge de comportamento atual de mypy . no workflow]`
+
+### 19.3 Fluxo do GitHub Actions
+
+O passo `Checagem de tipos` de `.github/workflows/tests.yml` (linhas 21 e 22) passa a executar o comando unico de 19.2 no lugar de `mypy . --no-error-summary`.
+
+- O job continua em `windows-latest` com Python 3.12 e instalacao por `pip install -e .[dev]` (`.github/workflows/tests.yml:9` a `:18`); NAO muda a ordem dos passos (`Testes` antes de `Checagem de tipos`) nem o nome do passo.
+- NAO acrescenta job, matriz de sistemas operacionais ou etapa de Linux ao workflow: o Linux so roda o comando localmente (17.2).
+- Verificacao objetiva: `grep -n "python -m mypy --platform win32 filepilot" .github/workflows/tests.yml` encontra uma linha e `grep -n "mypy . --no-error-summary" .github/workflows/tests.yml` nao encontra nenhuma.
+
+### 19.4 Itens existentes e o item de mypy
+
+Os itens `filepilot-v1-2` a `filepilot-v1-13` (`.abt/items/filepilot-v1/`) trazem `typecheck: mypy . --no-error-summary -> exit 0` nos campos `Verificacao:` e `Gates do item`, e `filepilot-v1-2.md` descreve esse comando nas linhas 18 e 30. Cada ocorrencia passa a usar o comando unico de 19.2, com o mesmo `-> exit 0`.
+
+- `filepilot-v1-1` ja foi entregue e mesclado (commit `940e833`): seu detalhe NAO e editado; o workflow que ele criou e ajustado por item novo (19.3).
+- `filepilot-mypy-1` (`.abt/items/filepilot-mypy/filepilot-mypy-1.md`) ja esta atendido: `mypy==2.4.0` esta em `pyproject.toml:19`, entregue por `filepilot-v1-1`. Ele e encerrado sem implementar e esta secao NAO cria item de substituicao para ele. O encerramento e feito pela pessoa na fila; esta secao so o registra.
+
+Escopo negativo: esta secao NAO altera `.abt/SPEC.md` fora de 19; NAO renumera nem edita secoes existentes; NAO edita itens ja entregues.
+
+### 19.5 Pendencias para decisao
+
+Nenhuma pendencia aberta nesta secao.
+
+### 19.6 Traceability Matrix
+
+| Item do escopo | Elementos da SPEC | Status | Origem |
+|---|---|---|---|
+| Comando unico `python -m mypy --platform win32 filepilot` em todos os itens | 19.2; 19.4; complementa 17.2 | coberto | discovery-notes.md |
+| O mesmo comando no passo de checagem de tipos do GitHub Actions | 19.3; substitui o escopo negativo de 17.2 | coberto | discovery-notes.md |
+| SPEC 17.2 reflete que o mypy roda no GitHub Actions | 19.2 (substitui a frase de 17.2) | coberto | discovery-notes.md |
+| Itens novos para o workflow e para os itens existentes, sem tocar o codigo do produto | 19.3; 19.4; 19.1 (fora de escopo) | coberto | discovery-notes.md |
+| `filepilot-mypy-1` registrado como atendido e encerrado sem implementar | 19.4 | coberto | discovery-notes.md |
+| Saida `Success: no issues found` e codigo 0 no Linux e no runner windows-latest | 19.2; 19.3 | coberto | discovery-notes.md |
+| - | 19.2 a checagem deixa de cobrir a pasta tests/ | - | `[DECISAO: aprovada no enriquecimento; diverge de comportamento atual de mypy . no workflow]` |
+| - | 19.2 excecao de filepilot-v1-1 sem trecho sobre verificacao por grep | - | `[DECISAO: aprovada no ponto de checagem; tirar da excecao o trecho sobre a verificacao por grep (VAG-001, opcao B)]` |
