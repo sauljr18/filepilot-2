@@ -49,7 +49,7 @@ def _drive_type(anchor: str) -> int:
     return int(ctypes.windll.kernel32.GetDriveTypeW(anchor))
 
 
-def _resolve_folder(folder: Path) -> Path:
+def resolve_folder(folder: Path) -> Path:
     """Resolve a pasta uma unica vez; laco de atalhos vira PASTA_INVALIDA (27.2)."""
     try:
         return folder.resolve()
@@ -112,7 +112,7 @@ def scan_folder(folder: Path) -> list[ScannedFile]:
     """Lista os arquivos elegiveis do nivel da pasta, ordenados por nome (6.1)."""
     if str(folder).startswith("\\\\"):
         raise _error("PASTA_PROTEGIDA")
-    resolved = _resolve_folder(folder)
+    resolved = resolve_folder(folder)
     if _is_protected(folder, resolved):
         raise _error("PASTA_PROTEGIDA")
     if not folder.is_dir():
