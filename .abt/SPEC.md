@@ -1247,3 +1247,7 @@ Item: filepilot-v1-10 (filepilot-2)
 ## §43 Aba Historico e desfazer na interface
 
 Item: filepilot-v1-11 (filepilot-2)
+
+## §44 Executavel Windows com PyInstaller e CI
+
+Item: filepilot-v1-13 (filepilot-2)
