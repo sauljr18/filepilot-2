@@ -1,0 +1,42 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Instalar dependencias
+        run: pip install -e .[dev]
+      - name: Testes
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: pytest
+      - name: Gerar executavel
+        run: pyinstaller packaging/filepilot.spec --noconfirm
+      - name: Abrir o executavel e conferir que continua rodando
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath "dist/FilePilot/FilePilot.exe" -PassThru
+          Start-Sleep -Seconds 5
+          if ($process.HasExited) {
+            Write-Error "FilePilot.exe encerrou em menos de 5 segundos (codigo de saida $($process.ExitCode))."
+            exit 1
+          }
+          Stop-Process -Id $process.Id -Force
+      - name: Compactar a pasta FilePilot
+        shell: pwsh
+        run: Compress-Archive -Path "dist/FilePilot" -DestinationPath "FilePilot-windows.zip"
+      - name: Publicar artefato
+        uses: actions/upload-artifact@v7
+        with:
+          name: FilePilot-windows
+          path: FilePilot-windows.zip
+          if-no-files-found: error
