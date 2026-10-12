@@ -1050,3 +1050,7 @@ Item: filepilot-v1-6 (filepilot-2)
 ## §29 Laco de atalhos na leitura da pasta vira PASTA_INVALIDA
 
 Item: filepilot-fix-1 (filepilot-2)
+
+## §30 Variavel de ambiente vazia nao torna a pasta atual protegida
+
+Item: filepilot-fix-2 (filepilot-2)
