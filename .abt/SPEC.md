@@ -893,3 +893,152 @@ Item: filepilot-v1-4 (filepilot-2)
 ## §26 Organizacao com historico por arquivo
 
 Item: filepilot-v1-5 (filepilot-2)
+
+## 27. Correcao de quatro defeitos de leitura de pasta, ordem da lista e organizacao interrompida [DELTA 2026-10-12, defeitos da main antes da interface]
+
+### 27.1 Objetivo e fora de escopo
+
+Esta secao especifica a correcao de quatro defeitos que ja estao na main, vindos de `.abt/product-spec/20261012-095850/discovery-notes.md`. Cada defeito tem um item de correcao proprio e ao menos um teste automatizado que falha antes e passa depois da correcao. Nenhum dado, contrato novo ou tela muda: so o comportamento de `scanner.scan_folder` (6.1), de `organizer.organize` (6.3) e de `db.connection.open_connection` (5.1 e 5.3) passa a seguir o texto abaixo.
+
+| Defeito | Onde | Hoje | Depois |
+|---|---|---|---|
+| D1 | `filepilot/services/scanner.py:52` | Pasta que e (ou esta dentro de) um laco de atalhos faz `Path.resolve()` levantar `RuntimeError`; vira `ERRO_INTERNO` na interface | `FilePilotError("PASTA_INVALIDA")` |
+| D2 | `filepilot/services/scanner.py:56` | Variavel `SystemRoot`, `ProgramFiles` ou `ProgramFiles(x86)` definida como vazia vira `Path("")`, que resolve para a pasta atual; a pasta atual passa a ser `PASTA_PROTEGIDA` | Variavel vazia vale como ausente: usa o padrao de 6.1 |
+| D3 | `filepilot/services/scanner.py:101` | Dois nomes que so diferem por maiuscula e minuscula empatam na chave; a ordem sai a de `iterdir()`, que muda entre execucoes | Ordem total e repetivel: desempate pelo nome exato |
+| D4 | `filepilot/services/organizer.py:190` a `:221`; `filepilot/db/connection.py:12` a `:28` | `sqlite3.Error` depois da abertura levanta `BANCO_INDISPONIVEL` e deixa a linha em `em_andamento`; ao reabrir o banco nada a recupera | A organizacao vira `interrompida` e nenhuma transacao fica aberta; ao abrir o banco, toda linha `em_andamento` que sobrou vira `interrompida` `[DECISAO: aprovada no ponto de checagem; opcao A do GAP-001, a recuperacao na abertura entra na correcao do defeito 4]` |
+
+Fora de escopo desta secao:
+
+- A interface (abas, dialogos, mensagens novas): o texto das mensagens de erro continua o de 6.
+- Novas funcionalidades, mudanca de stack, novas tabelas, colunas ou migracoes.
+- Defeitos que nao estao nos quatro acima (27.6 registra um achado vizinho, o laco de atalhos no destino do planner, que NAO e corrigido aqui).
+- Editar ou renumerar secoes existentes e os cabecalhos `## §N`: o que muda nelas e dito aqui, com a referencia ("substitui a linha de 6.1 sobre ordenacao").
+
+Os defeitos sao independentes: nenhum item depende de outro, e a ordem de entrega e livre.
+
+### 27.2 D1: pasta com laco de atalhos e pasta invalida
+
+Substitui, em 6.1, o tratamento de `folder.resolve()` na verificacao de pasta protegida. As demais regras de 6.1 ficam como estao.
+
+- Medicao feita nesta execucao (Python 3.12, Linux): `Path.resolve()` de um caminho cuja resolucao entra em ciclo (`a -> b`, `b -> a`, ou `x -> x`) levanta `RuntimeError`; `Path.is_dir()` desse mesmo caminho devolve `False`. Caminho com varios `up -> ..` aninhados mas sem ciclo de links ja devolve `PASTA_INVALIDA` hoje e continua assim.
+- `scan_folder` passa a resolver `folder` uma unica vez, num helper `_resolve_folder(folder: Path) -> Path` de `filepilot/services/scanner.py`. O helper devolve `folder.resolve()` e converte a falha de resolucao em `FilePilotError("PASTA_INVALIDA", <mensagem de 6>)`, com `raise ... from exc`.
+- Falhas de resolucao convertidas: `RuntimeError` (laco de links no Python 3.12) e `OSError` cujo `errno` seja `errno.ELOOP` ou cujo `winerror` seja 1921 (`ERROR_CANT_RESOLVE_FILENAME`, o laco no Windows), lido com `getattr(exc, "winerror", None)` como em `organizer._failure_text` (`organizer.py:84`), para o mypy passar em qualquer plataforma `[DECISAO: so o laco vira PASTA_INVALIDA; outro OSError de resolucao, como acesso negado, continua subindo como hoje, porque o enunciado trata so do laco de atalhos]`.
+- `_is_protected(folder)` passa a receber o caminho ja resolvido (`_is_protected(folder: Path, resolved: Path) -> bool`), em vez de chamar `folder.resolve()` por conta propria `[DECISAO: resolver uma vez evita duas leituras do disco e deixa o ponto de falha unico]`. A checagem `str(folder).startswith("\\\\")` continua usando o caminho original.
+- Ordem das verificacoes em `scan_folder`, sem mudar a de 6.1: (1) o caminho de rede `\\` (sem resolver); (2) `_resolve_folder` (levanta `PASTA_INVALIDA` no laco); (3) `_is_protected`; (4) `folder.is_dir()` (`PASTA_INVALIDA`); (5) a listagem. Um laco nunca chega a (3).
+- `PASTA_INVALIDA` por laco usa a mesma mensagem de 6: "A pasta escolhida não existe ou não é uma pasta." `[DECISAO: nao ha texto novo; o enunciado pede dizer que a pasta e invalida]`.
+- `FilePilotError.message` dessa `PASTA_INVALIDA` e sempre o texto fixo de 6, nunca o texto da excecao original (por exemplo `Symlink loop from ...`), que fica so na cadeia do `raise ... from exc` `[DECISAO: aprovada no enriquecimento; sugestao 2]`.
+- Efeitos: nenhum; so le.
+
+Testes obrigatorios (arquivo novo `tests/services/test_scanner_loop.py`):
+
+1. `Path.resolve` trocado por `monkeypatch` para levantar `RuntimeError("Symlink loop")` para a pasta escolhida: `scan_folder(tmp_path / "laco")` levanta `FilePilotError` com `code == "PASTA_INVALIDA"`, com `exc.message` igual ao texto de 6 e sem o texto `Symlink loop` nele (roda no Windows e no Linux, sem criar link).
+2. Mesmo teste com `OSError` de `errno.ELOOP`: `PASTA_INVALIDA`.
+3. `OSError` de `errno.EACCES` na resolucao NAO vira `PASTA_INVALIDA` (continua `OSError`): garante que so o laco e convertido.
+4. Laco real, `a -> b` e `b -> a`, criado com `Path.symlink_to`; `pytest.skip` se o sistema recusar criar o link (`OSError` ou `NotImplementedError`): `PASTA_INVALIDA`.
+5. Pasta valida com um link `up -> ..` dentro dela continua listando so os arquivos regulares (o link e ignorado, como em 6.1); o link e criado como no teste 4, com `pytest.skip` se o sistema recusar.
+
+### 27.3 D2: variavel de ambiente vazia vale como ausente
+
+Substitui, em 6.1, a frase "variaveis de ambiente, com `C:\Windows`, `C:\Program Files` e `C:\Program Files (x86)` como padrao se ausentes".
+
+- Medicao feita nesta execucao: com `SystemRoot=""`, `Path(os.environ.get("SystemRoot", r"C:\Windows")).resolve()` e igual a `Path.cwd()`; como `scanner.py:57` testa `root in resolved.parents`, toda pasta dentro da pasta atual vira `PASTA_PROTEGIDA`.
+- Novo helper `_protected_root(variable: str, default: str) -> Path` em `filepilot/services/scanner.py`: le `os.environ.get(variable)`; se for `None`, `""` ou so espacos (`value.strip() == ""`), usa `default`; senao usa o valor como esta `[DECISAO: so espacos tambem vale como vazio, porque o caminho resultante resolveria para a pasta atual do mesmo jeito; o enunciado cita so a variavel vazia]`. Devolve `Path(value).resolve()`.
+- O laco de `_is_protected` sobre `_PROTECTED_ENV` passa a chamar `_protected_root(variable, default)` para as tres variaveis (`SystemRoot`, `ProgramFiles`, `ProgramFiles(x86)`) `[DECISAO: as tres variaveis tem o mesmo defeito e a mesma regra; corrigir so SystemRoot deixaria os outros dois com o defeito]`.
+- Valor vazio nao e erro e nao gera aviso: o comportamento e o de variavel ausente (6.1).
+- Valor nao vazio e relativo (por exemplo `windows`) NAO muda: continua resolvido a partir da pasta atual, como hoje. Fica fora do escopo `[DECISAO: o enunciado trata so da variavel vazia]`.
+- Efeitos: nenhum; so le.
+
+Testes obrigatorios (em `tests/services/test_scanner_protected.py`, que ja guarda as variaveis em `ENV_VARIABLES`, linha 15):
+
+1. Parametrizado nas tres variaveis: `monkeypatch.setenv(variavel, "")` e `monkeypatch.chdir(tmp_path)`; `scan_folder(tmp_path / "pasta")` com um arquivo regular dentro devolve a lista, sem `PASTA_PROTEGIDA`.
+2. O mesmo com o valor `"   "` (so espacos).
+3. Com `SystemRoot` vazia, a pasta `C:\Windows` do padrao continua protegida onde o teste puder representa-la: o teste chama `_protected_root("SystemRoot", r"C:\Windows")` e confere que o resultado e `Path(r"C:\Windows").resolve()`, e nao a pasta atual.
+4. Regressao: com `SystemRoot` apontando para uma pasta de `tmp_path`, as pastas dentro dela continuam `PASTA_PROTEGIDA` (teste existente da linha 91 continua passando).
+
+### 27.4 D3: ordem total e repetivel da lista de arquivos
+
+Substitui, em 6.1, a frase "ordena por `name` sem diferenciar maiusculas".
+
+- Hoje: `files.sort(key=lambda item: item.name.casefold())` (`scanner.py:101`). Nomes como `A.txt` e `a.txt` tem a mesma chave e o `sort`, que e estavel, os deixa na ordem de `Path.iterdir()`, que o sistema de arquivos pode devolver em ordem diferente a cada execucao. Isso muda a ordem de `seq` no plano (6.2) e a de `operations` (5.3).
+- Nova chave: `(item.name.casefold(), item.name)`. A ordem e: (1) o nome sem diferenciar maiusculas; (2) em empate, o nome exato, na ordem dos pontos de codigo (`"A.txt"` antes de `"a.txt"`, porque `"A" < "a"`) `[DECISAO: a ordem dos pontos de codigo e total, repetivel e nao depende de idioma nem de configuracao regional]`.
+- A ordem entre nomes que ja diferiam em `casefold` NAO muda. O criterio de desempate so age nos empates.
+- O resultado de `scan_folder` fica igual para qualquer ordem em que `iterdir()` entregue os mesmos nomes.
+- No Windows dois nomes que so diferem por maiuscula nao coexistem na mesma pasta; o defeito aparece em sistema de arquivos que diferencia maiusculas (uma pasta com diferenciacao de maiusculas ativada no NTFS, o WSL, um teste em Linux; pasta de rede nao entra, porque 6.1 a recusa como `PASTA_PROTEGIDA`). A correcao vale em todos.
+- Efeitos: nenhum; so le.
+
+Testes obrigatorios (arquivo novo `tests/services/test_scanner_order.py`). Os testes NAO criam dois arquivos que so diferem por maiuscula no disco (isso falharia no runner `windows-latest`): eles trocam `Path.iterdir` e `scanner._scan_entry` por `monkeypatch`.
+
+1. `iterdir` devolve `[b.txt, a.txt, A.txt]`; `_scan_entry` devolve um `ScannedFile` sintetico para cada caminho; o resultado tem os nomes `["A.txt", "a.txt", "b.txt"]`.
+2. O mesmo com `iterdir` devolvendo `[A.txt, a.txt, b.txt]` e depois `[a.txt, A.txt, b.txt]`: os tres resultados sao iguais entre si (a ordem nao depende da entrada).
+3. Tres variantes do mesmo nome (`Foto.JPG`, `foto.jpg`, `FOTO.jpg`) em todas as 6 permutacoes de entrada: a lista de nomes e a mesma nas 6.
+4. Regressao: nomes que ja diferiam em `casefold` (`beta.txt`, `Alfa.txt`) continuam em ordem alfabetica sem diferenciar maiusculas.
+
+### 27.5 D4: banco indisponivel no meio da organizacao
+
+Substitui, em 6.3, a frase "Falha de `sqlite3.Error` em qualquer gravacao levanta `BANCO_INDISPONIVEL`; o arquivo ja movido sem registro e restaurado por `os.rename` de volta antes de levantar". A restauracao do arquivo continua; acrescenta-se o tratamento da linha de `organizations`. Implementa tambem, em `open_connection`, a recuperacao que 5.3 ja descreve ("ao abrir o banco, toda linha `em_andamento` vira `interrompida`") e que o codigo nao fazia.
+
+- Hoje: `_open_organization` grava a linha `em_andamento` com `commit` (`organizer.py:130`). Se depois disso `_record_operation` (`:206`) ou `_close_organization` (`:218`) levanta `sqlite3.Error`, o `_run` devolve `BANCO_INDISPONIVEL` e nada atualiza a linha: ela fica `em_andamento` para sempre, e `last_undoable` (6.4) nao a considera desfazivel.
+- Novo helper `_interrupt_organization(conn: sqlite3.Connection, organization_id: int, result: OrganizationResult) -> None` em `filepilot/services/organizer.py`. Ele faz, nesta ordem e tudo dentro de `contextlib.suppress(sqlite3.Error)`: (1) `conn.rollback()`, que desfaz qualquer transacao que a falha deixou aberta; (2) `UPDATE organizations SET finished_at = ?, status = 'interrompida', moved_count = ?, failed_count = ?, updated_at = ? WHERE id = ? AND status = 'em_andamento'`, sempre com parametros de SQL e nunca com texto concatenado, com a hora UTC atual e as contagens de `result` ate aquele ponto; so uma linha ainda `em_andamento` e marcada, e uma linha em outro status (`concluida`, `desfeita`) nao e alterada `[DECISAO: aprovada no enriquecimento; sugestao 3]`; (3) `conn.commit()`.
+- O helper nunca levanta: se o banco continuar indisponivel, o `UPDATE` tambem falha e a linha fica como esta ate a proxima abertura do banco, que a recupera (recuperacao na abertura, abaixo). O erro que sobe para quem chamou e sempre o `BANCO_INDISPONIVEL` original.
+- `_run` chama o helper em dois pontos, sempre antes de `raise _error("BANCO_INDISPONIVEL")`: (a) no `except sqlite3.Error` do registro da operacao, depois de devolver o arquivo ao lugar com `os.rename`; (b) em `_close_organization`, quando o `UPDATE` de fechamento falha. Em (b) todas as operacoes ja estao gravadas e a organizacao vira `interrompida` com as contagens finais.
+- Contagem: o arquivo cuja gravacao falhou e restaurado ao lugar e NAO entra em `moved_count` nem em `failed_count`; `moved_count` so conta as operacoes cujo registro foi gravado.
+- `_open_organization` tambem ganha `conn.rollback()` dentro de `contextlib.suppress(sqlite3.Error)` antes de levantar `BANCO_INDISPONIVEL`, para nao deixar a insercao sem `commit` pendente na conexao `[DECISAO: nesse ponto ainda nao ha linha confirmada, entao so o rollback e necessario; nao ha o que marcar como interrompida]`.
+- `interrompida` ja e um status valido de `organizations` (5.3): nao ha migracao nem coluna nova. As operacoes gravadas continuam validas, e o desfazer (6.5) as aceita porque `last_undoable` (6.4) devolve organizacao `interrompida` com `moved_count >= 1`.
+- Falha ja na primeira gravacao: a organizacao fica `interrompida` com `moved_count == 0`; aparece no historico como "Interrompida" (7.4), nao e desfazivel (`last_undoable` devolve `None`, 6.4) e nao altera nenhum arquivo, porque o arquivo da gravacao que falhou volta ao lugar `[DECISAO: aprovada no enriquecimento; sugestao 1]`.
+- Em qualquer falha, `OPERATION_LOCK` continua liberado pelo `finally` de `organize` (`organizer.py:236`): uma nova organizacao pode comecar depois.
+- Nao muda: `OrganizationResult` nao e devolvido na falha; o `progress_callback` final (`done == total`) NAO e chamado; as mensagens de 6 e de 6.7.
+
+Recuperacao ao abrir o banco `[DECISAO: aprovada no ponto de checagem; opcao A do GAP-001, a recuperacao na abertura entra na correcao do defeito 4]`. Cobre o caso em que o banco ficou tao indisponivel que nem o `UPDATE` do helper gravou, e o aplicativo encerrado no meio (5.3):
+
+- Nova funcao `_recover_interrupted(conn: sqlite3.Connection) -> None` em `filepilot/db/connection.py`, chamada por `open_connection` logo depois de `apply_migrations(conn)` e dentro do mesmo `try`. Ela roda `UPDATE organizations SET status = 'interrompida', finished_at = ?, updated_at = ?, moved_count = (SELECT COUNT(*) FROM operations o WHERE o.organization_id = organizations.id AND o.status = 'movido'), failed_count = (SELECT COUNT(*) FROM operations o WHERE o.organization_id = organizations.id AND o.status = 'falha') WHERE status = 'em_andamento'` com parametros de SQL, e depois `conn.commit()`.
+- As contagens sao recalculadas das linhas de `operations`, porque `organizations.moved_count` so e gravado no fechamento (`organizer.py:175` a `:187`): sem o recalculo, uma organizacao que parou no meio ficaria com `moved_count == 0` e `last_undoable` (6.4) a recusaria, o que contradiz 5.3 ("as operacoes ja gravadas continuam validas e permitem desfazer") `[DECISAO: recalcular das operacoes e o unico jeito de a linha recuperada permitir o desfazer]`.
+- `finished_at` recebe a hora UTC da recuperacao e `updated_at` a mesma hora, no formato `AAAA-MM-DDTHH:MM:SSZ` de 5, por uma funcao `_utc_now()` local de `connection.py` `[DECISAO: nao ha hora real do fim; a da recuperacao e a mais proxima e deixa finished_at preenchido em toda linha nao em andamento]`.
+- Linhas em outros status (`concluida`, `interrompida`, `desfeita`) nao sao alteradas. Banco sem linha `em_andamento`: nenhuma alteracao.
+- `sqlite3.Error` na recuperacao cai no `except` ja existente de `open_connection`: fecha a conexao e levanta `FilePilotError("BANCO_INDISPONIVEL", ...)`, sem texto novo.
+- Premissa: nenhuma organizacao esta em curso quando `open_connection` roda. Vale no aplicativo: a `MainWindow` abre a unica conexao em `__init__` (7.1) e a instancia unica de 7.1 impede outro processo; as abas usam essa conexao `[DECISAO: premissa registrada para quem chamar open_connection fora da MainWindow; ela nao e verificada em codigo para a camada db nao importar a de servicos (3.2)]`.
+
+Testes obrigatorios da recuperacao (arquivo novo `tests/db/test_connection_recovery.py`, no estilo de `tests/db/test_migrations.py`):
+
+1. Banco com uma organizacao `em_andamento` e 3 operacoes gravadas (2 `movido`, 1 `falha`): depois de `open_connection` no mesmo arquivo, o status e `interrompida`, `moved_count == 2`, `failed_count == 1`, `finished_at` e `updated_at` preenchidos, e `last_undoable(conn)` devolve essa organizacao.
+2. Linhas em `concluida`, `interrompida` e `desfeita` ficam identicas (status, contagens, `finished_at`) depois de `open_connection`.
+3. Banco novo ou sem organizacao `em_andamento`: `open_connection` abre sem alterar nenhuma linha.
+4. `_recover_interrupted` trocada por `monkeypatch` para levantar `sqlite3.OperationalError`: `open_connection` levanta `FilePilotError` com `code == "BANCO_INDISPONIVEL"`.
+
+Testes obrigatorios (arquivo novo `tests/services/test_organizer_interrupted.py`, no estilo de `tests/services/test_organizer_failures.py`):
+
+1. `_record_operation` trocado por `monkeypatch` para levantar `sqlite3.OperationalError` na segunda operacao de um plano de 3 arquivos: `organize` levanta `FilePilotError` com `code == "BANCO_INDISPONIVEL"`; a linha de `organizations` tem `status == "interrompida"`, `moved_count == 1`, `failed_count == 0` e `finished_at` preenchido; o arquivo da segunda operacao esta de volta na pasta original.
+2. No mesmo teste, `conn.in_transaction` e `False` depois do erro.
+3. O `UPDATE` de fechamento falha de verdade, sem trocar `_close_organization` (que chama o helper por dentro): o teste cria no banco, antes de `organize`, um `TRIGGER BEFORE UPDATE ON organizations WHEN NEW.status = 'concluida'` com `SELECT RAISE(ABORT, 'falha')`; `organize` levanta `BANCO_INDISPONIVEL`, a linha tem `status == "interrompida"` e as contagens finais do plano (o `UPDATE` do helper, com `status = 'interrompida'`, passa pelo gatilho).
+4. `last_undoable(conn)` (6.4) devolve a organizacao do teste 1 (nao `None`).
+5. Depois da falha, `OPERATION_LOCK.acquire(blocking=False)` devolve `True` (e e liberado de novo no fim do teste).
+6. Banco inteiramente indisponivel (a conexao e fechada com `conn.close()` entre a abertura e a segunda operacao, via `monkeypatch` do `_record_operation`): `organize` ainda levanta `BANCO_INDISPONIVEL`, sem levantar `ProgrammingError`, e o helper nao propaga a falha do proprio `UPDATE`.
+7. Falha ja na primeira operacao de um plano de 3 arquivos: `BANCO_INDISPONIVEL`, linha `interrompida` com `moved_count == 0`, arquivo original no lugar e `last_undoable(conn)` igual a `None`.
+8. Linha ja em `concluida`: chamar `_interrupt_organization` nao altera `status`, contagens nem `finished_at`.
+
+### 27.6 Pendencias para decisao
+
+Nenhuma decisao pendente nesta secao: a recuperacao ao abrir o banco, que estava aqui como pendencia 1, foi decidida pela pessoa no ponto de checagem da validacao (opcao A do GAP-001) e entrou em 27.5.
+
+Registro fora de escopo (nao e decisao pendente):
+
+1. Laco de atalhos no destino. `planner._inside` (`planner.py:49`) chama `resolve()` e levantaria `RuntimeError` se uma subpasta de destino for um laco de atalhos. Nao e um dos quatro defeitos e NAO e corrigido aqui `[DECISAO: fora do escopo confirmado na descoberta; registrado para nao se perder]`.
+
+### 27.7 Traceability Matrix
+
+| Item do escopo | Elementos da SPEC | Status | Origem |
+|---|---|---|---|
+| F1: laco de atalho na leitura de pasta vira pasta invalida, sem erro interno | 27.2; substitui o tratamento de `resolve()` de 6.1 | coberto | discovery-notes.md |
+| F2: `SystemRoot` vazia nao torna a pasta atual protegida | 27.3; substitui a frase das variaveis de ambiente de 6.1 | coberto | discovery-notes.md |
+| F3: ordem da lista estavel quando nomes so diferem por maiuscula e minuscula | 27.4; substitui a frase de ordenacao de 6.1 | coberto | discovery-notes.md |
+| F4: banco indisponivel no meio da organizacao desfaz o que foi aberto e encerra a organizacao | 27.5 (helper de interrupcao e recuperacao ao abrir o banco); substitui a frase de falha de `sqlite3.Error` de 6.3 e implementa a recuperacao de 5.3 | coberto | discovery-notes.md; `[DECISAO: aprovada no ponto de checagem; opcao A do GAP-001, a recuperacao na abertura entra na correcao do defeito 4]` |
+| F5: um item de correcao com ao menos um teste por defeito | 27.2 a 27.5 (testes obrigatorios) | coberto | discovery-notes.md |
+| Fora de escopo: interface, novas funcionalidades, mudanca de stack, outros defeitos | 27.1; 27.6 | coberto | discovery-notes.md |
+| Metrica: suite pytest e mypy sem regressao | 27.2 a 27.5; mypy do comando unico de 19.2 | coberto | discovery-notes.md |
+| - | 27.2 so o laco vira `PASTA_INVALIDA`; outro `OSError` continua subindo | - | `[DECISAO: so o laco de atalhos e tratado, como no enunciado]` |
+| - | 27.3 `ProgramFiles` e `ProgramFiles(x86)` recebem a mesma regra de variavel vazia | - | `[DECISAO: o mesmo defeito vale para as tres variaveis]` |
+| - | 27.4 desempate pelo nome exato, na ordem dos pontos de codigo | - | `[DECISAO: ordem total independente de idioma]` |
+| - | 27.5 organizacao vira `interrompida` com as contagens ate o ponto da falha | - | `[DECISAO: usa o status de 5.3, que ja permite desfazer]` |
+| - | 27.5 falha na primeira gravacao: `interrompida` com 0 movidos, sem Desfazer | - | `[DECISAO: aprovada no enriquecimento; sugestao 1]` |
+| - | 27.2 mensagem fixa de 6 na `PASTA_INVALIDA` por laco | - | `[DECISAO: aprovada no enriquecimento; sugestao 2]` |
+| - | 27.5 `UPDATE` do helper so em linha `em_andamento` | - | `[DECISAO: aprovada no enriquecimento; sugestao 3]` |
+| - | 27.5 contagens da linha recuperada recalculadas das operacoes; `finished_at` com a hora da recuperacao; premissa de nenhuma organizacao em curso | - | `[DECISAO: recalculo, hora e premissa necessarios para cumprir a opcao A do GAP-001; detalhe em 27.5]` |
