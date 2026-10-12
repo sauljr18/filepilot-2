@@ -124,5 +124,5 @@ def scan_folder(folder: Path) -> list[ScannedFile]:
     files = [item for item in map(_scan_entry, entries) if item is not None]
     if not files:
         raise _error("PASTA_VAZIA")
-    files.sort(key=lambda item: item.name.casefold())
+    files.sort(key=lambda item: (item.name.casefold(), item.name))
     return files
