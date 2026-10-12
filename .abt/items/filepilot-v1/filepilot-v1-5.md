@@ -5,7 +5,29 @@ Epico: filepilot-v1 | Ordem: 5 | Pontos: 5 | Depende de: filepilot-v1-1,filepilo
 organize move os arquivos do plano com os.rename, grava cada operacao no banco com commit imediato, reporta progresso e nunca sobrescreve nem apaga arquivo.
 
 ## Contexto herdado
--
+Entregue por filepilot-v1-4 (commit 4d5a619). Nao reimplementar: a precedencia de regra, a categoria padrao, o sufixo `(n)` de nome repetido, a guarda de pasta e os testes de `tests/services/test_planner*.py`. `organize` recebe o `Plan` pronto e so o executa.
+
+Artefatos criados:
+- filepilot/services/planner.py - servico - exporta `build_plan(folder: Path, files: list[ScannedFile], rules: list[Rule]) -> Plan`
+- tests/services/test_planner.py - testes - categoria, precedencia, `seq` e `skipped`
+- tests/services/test_planner_conflicts.py - testes - sufixo `(n)`, maiusculas e plano sem efeitos
+- tests/services/test_planner_guard.py - testes - `DESTINO_FORA_DA_PASTA`, arvore intacta e `is_empty`
+- .abt/reviews/filepilot-v1-4.md - relatorio - veredito APROVADO da Rita
+
+Contratos:
+- `build_plan` (filepilot/services/planner.py): so le o disco (`os.scandir` nos destinos), nao cria pastas, nao move e nao toca no banco; nao recebe conexao. Devolve `Plan(folder, operations, skipped)` de `filepilot/domain/models.py`; `operations` segue a ordem de `files` com `seq` de 1 a N. Levanta `FilePilotError` com `DESTINO_FORA_DA_PASTA` e nenhum plano e devolvido.
+- `PlannedOperation.category` guarda a CHAVE da categoria (`documentos`, `imagens`, `videos`, `compactados`), nunca a subpasta, e e `None` quando a regra vence; `rule_name` e o inverso. `destination_path` ja traz o nome final sem conflito no momento do plano.
+- Armadilha: o plano e calculado antes da execucao, entao um arquivo pode surgir no destino depois dele. Reabrir o nome livre nesse caso e do `organize` (f2 deste item e SPEC 15.2, `FileExistsError` com novo sufixo): o helper privado `_free_name(name, taken)` recebe `taken` como conjunto de nomes ja em `casefold()`, e `_existing_names(directory)` le a pasta; ambos sao privados de planner.py, entao o `organize` precisa de uma funcao publica ou de importar o helper com decisao explicita, sem copiar a logica.
+- Achado aberto do relatorio (nao bloqueia): a guarda de planner.py:85 e redundante com a de 76-77; a validacao de `rules.py` ja recusa `..`, `.` e segmento vazio em `destination_folder`.
+
+Nomes decididos:
+- Helpers privados de planner.py: `_error`, `_target`, `_existing_names`, `_inside` e `_free_name`; o dicionario de mensagens do modulo e `_MESSAGES` (so `DESTINO_FORA_DA_PASTA`).
+- Os testes do planner ficam em `tests/services/test_planner.py` e `test_planner_<assunto>.py` (`conflicts`, `guard`), a convencao de `test_<modulo>_<assunto>.py`.
+
+Padroes estabelecidos:
+- Nomes comparados sem diferenciar maiusculas por `casefold()`, inclusive a chave do cache de pasta (`str(directory).casefold()`).
+- Guarda de pasta por `destination.resolve().is_relative_to(folder.resolve())` na funcao `_inside`, aplicada antes de ler o destino e depois do sufixo.
+- Os testes montam `ScannedFile` e `Rule` a mao, com um helper `_file` local por arquivo, e usam `tmp_path` sem `monkeypatch`.
 
 ## Features
 
