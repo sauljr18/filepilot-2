@@ -865,3 +865,7 @@ Nenhuma pendencia aberta nesta secao.
 | Saida `Success: no issues found` e codigo 0 no Linux e no runner windows-latest | 19.2; 19.3 | coberto | discovery-notes.md |
 | - | 19.2 a checagem deixa de cobrir a pasta tests/ | - | `[DECISAO: aprovada no enriquecimento; diverge de comportamento atual de mypy . no workflow]` |
 | - | 19.2 excecao de filepilot-v1-1 sem trecho sobre verificacao por grep | - | `[DECISAO: aprovada no ponto de checagem; tirar da excecao o trecho sobre a verificacao por grep (VAG-001, opcao B)]` |
+
+## §20 Checagem de tipos com mypy no pyproject
+
+Item: filepilot-mypy-1 (filepilot-2)
