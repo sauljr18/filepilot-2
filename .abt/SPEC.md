@@ -1251,3 +1251,210 @@ Item: filepilot-v1-11 (filepilot-2)
 ## §44 Executavel Windows com PyInstaller e CI
 
 Item: filepilot-v1-13 (filepilot-2)
+
+## 45. Correcao de sete defeitos remanescentes na main [DELTA 2026-10-13, historico, desfazer, laco no Windows, barra de progresso, testes e repositorio]
+
+### 45.1 Objetivo e fora de escopo
+
+Esta secao especifica a correcao de sete defeitos que ja estao na main, vindos de `.abt/product-spec/20261013-161832/discovery-notes.md`. Cada defeito tem um item de correcao proprio e ao menos um teste automatizado que falha antes e passa depois da correcao. Nenhum dado, tabela, coluna ou migracao muda. Um unico contrato muda: `undo.undo_last` passa a poder levantar `PASTA_INVALIDA` (45.3). Nenhum texto de interface novo: as mensagens sao as de 6 e 7.
+
+| Defeito | Onde | Hoje | Depois |
+|---|---|---|---|
+| D1 | `filepilot/ui/history_tab.py:60` a `:66` | Organizacao com `started_at` no ano 0001 faz `astimezone()` levantar `OverflowError`; a pagina do Historico nao carrega | A celula "Data e hora" mostra o `started_at` como veio; a pagina carrega |
+| D2 | `filepilot/services/undo.py:46` a `:47` e `:103` | Laco de atalhos em `source_path` ou `folder_path` levanta `RuntimeError`; a tela mostra "Ocorreu um erro inesperado. Tente de novo." | `FilePilotError("PASTA_INVALIDA")`, o mesmo tratamento de 27.2 e 37.5 |
+| D3 | `filepilot/services/scanner.py:52` a `:61` | No Windows, `Path.resolve()` nao levanta no laco real; o teste de `tests/services/test_planner_loop.py:105` e pulado e a recusa nao e provada | `resolve_folder` detecta o laco pela travessia dos componentes e a recusa e provada no Windows |
+| D4 | `filepilot/ui/organize_tab.py:367` a `:382` | A barra de progresso da organizacao continua visivel depois de desfazer | A barra some ao iniciar o desfazer |
+| D5 | `tests/ui/test_single_instance.py:130` e testes de `tests/ui/test_undo_button.py` | `readline()` sem limite e `QMessageBox` real bloqueiam a suite para sempre quando o comportamento esta errado | Falham com `AssertionError` ou `pytestqt.exceptions.TimeoutError` em ate 15 s |
+| D6 | tres fixtures em `tests/ui` e `.github/workflows/tests.yml:22` | `mypy .` da 3 erros nos testes e o comando unico de 19.2 deixa `tests/` fora da checagem | As tres fixtures tipadas; o comando unico passa a cobrir `tests/` |
+| D7 | raiz do repositorio | Nao ha `.gitignore`; `__pycache__/`, `.mypy_cache/` e `*.egg-info/` aparecem como nao rastreados | `.gitignore` com os padroes de 45.8 |
+
+Fora de escopo desta secao: qualquer mudanca alem dos sete defeitos; funcionalidade nova; refatoracao; atualizar a `stack-decision.md`; editar ou renumerar secoes existentes e os cabecalhos `## §N`. O que muda nelas e dito aqui, com a referencia.
+
+Os defeitos sao independentes: nenhum item depende de outro e a ordem de entrega e livre. D2 usa `resolve_folder` de `scanner.py`, que ja e publico na main (37.5). Cada item roda, no gate de tipos, o comando de 19.2 vigente na hora da entrega; o codigo de teste novo de qualquer item tambem precisa passar em `python -m mypy --platform win32 filepilot tests` `[DECISAO: evita que D6 reabra erros criados por outro item]`.
+
+### 45.2 D1: data invalida no Historico
+
+Acrescenta a 7.4, na linha da coluna "Data e hora": quando `started_at` nao pode virar horario local, a celula mostra o `started_at` como veio.
+
+- Medicao feita nesta execucao (Python 3.12.3, Linux): `datetime.strptime("0001-01-01T00:00:00Z", "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC).astimezone()` levanta `OverflowError: date value out of range`. O `ValueError` ja tratado nao a cobre.
+- Hoje: `format_local_time` (`history_tab.py:60` a `:66`) captura so `ValueError`. `_organization_cells` (`:113` a `:120`) a chama dentro de `_set_organizations` (`:243`), e `_load_page` (`:266` a `:278`) captura so `FilePilotError`: o `OverflowError` sobe do slot e a pagina nao carrega.
+- Novo: `format_local_time` captura `(ValueError, OverflowError, OSError)` em torno da conversao e devolve `started_at` sem alteracao, como ja faz para texto que nao e ISO (`format_local_time("ontem") == "ontem"`). `OSError` cobre o Windows, onde `astimezone()` fora do intervalo de `time_t` levanta `OSError` `[DECISAO: no Windows o erro da mesma conversao e OSError, nao OverflowError; a correcao cobre os dois]`.
+- Nao muda: `last_undoable` e `list_organizations` (6.4), a ordenacao por `started_at DESC, id DESC`, o formato `dd/MM/yyyy HH:mm` das datas validas e as demais colunas.
+- Efeitos: nenhum no disco nem no banco.
+
+Testes obrigatorios (arquivo novo `tests/ui/test_history_invalid_date.py`, no estilo de `tests/ui/test_history_tab.py`, com a fixture `conn` e `_add_organization` copiadas dele; a fixture `conn` e anotada `Iterator[sqlite3.Connection]`, regra de 45.7):
+
+1. `format_local_time("0001-01-01T00:00:00Z") == "0001-01-01T00:00:00Z"`.
+2. `history_tab.datetime` trocado por `monkeypatch` por uma classe com `strptime` que devolve um objeto cujo `replace` devolve ele mesmo e cujo `astimezone` levanta `OSError(errno.EINVAL, "Invalid argument")`: `format_local_time("2026-10-12T09:30:00Z") == "2026-10-12T09:30:00Z"`.
+3. `HistoryTab(conn)` com duas organizacoes, uma com `started_at` `"0001-01-01T00:00:00Z"` e outra com `"2026-10-12T09:30:00Z"`: `tab.reload()` nao levanta; `rowCount() == 2`; a celula "Data e hora" da primeira linha e `format_local_time("2026-10-12T09:30:00Z")`, a da segunda e `"0001-01-01T00:00:00Z"`; `status_label.text() == ""` e `retry_button` escondido.
+4. Regressao: `format_local_time("2026-10-12T09:30:00Z")` continua devolvendo o horario local formatado e `format_local_time("ontem") == "ontem"` (`tests/ui/test_history_tab.py` sem alteracao).
+
+### 45.3 D2: desfazer com laco de atalhos
+
+Acrescenta a 6.5, na linha "Erros", o codigo `PASTA_INVALIDA`, e substitui a frase "A guarda e sempre aplicada..." so no que diz respeito a falha da resolucao do caminho. As demais regras de 6.5 ficam como estao.
+
+- Hoje: `_is_inside` (`undo.py:46` a `:47`) chama `path.resolve()` e `folder.resolve()` sem tratamento; `_restore_file` a chama em `:53` e `_remove_empty_folders` chama `resolve()` e `_is_inside` em `:103`. O `RuntimeError` nao e `sqlite3.Error` nem `FilePilotError`: sobe por `undo_last` ate `UndoWorker.run`, vira `ERRO_INTERNO` e a aba mostra "Ocorreu um erro inesperado. Tente de novo." (texto fixo de 6.7).
+- Novo: `_is_inside` usa `resolve_folder` (`scanner.py:52`, 45.4) para `path` e para `folder`. Laco de atalhos em `source_path` ou em `folder_path` levanta `FilePilotError("PASTA_INVALIDA", "A pasta escolhida não existe ou não é uma pasta.")`, o texto fixo de 6, nunca o da excecao original. `undo_last` deixa o erro subir sem tratamento novo; `undo.py` importa `resolve_folder` de `filepilot.services.scanner` (nao ha ciclo: `scanner` nao importa `undo`).
+- Opcao A, escolhida pela pessoa nesta execucao: o desfazer inteiro termina com `PASTA_INVALIDA` assim que um caminho tem laco `[DECISAO: aprovada pela pessoa na pergunta desta execucao; opcao A, recusada a opcao B de marcar so o arquivo como nao_restaurado]`.
+- Estado depois do erro: as operacoes ja restauradas continuam `restaurado` e no lugar (cada status e `commit` na hora); as demais ficam `movido`; a organizacao NAO e marcada `desfeita`; `conn.in_transaction` e `False`; `OPERATION_LOCK` e liberado pelo `finally` de `undo_last`. Um novo desfazer percorre so as linhas `movido` e levanta o mesmo erro enquanto o laco existir; sem o laco, conclui e fecha a organizacao como `desfeita`.
+- Limpeza de pastas vazias: laco numa pasta de destino ou em algum pai dela NAO levanta erro. O `FilePilotError` de `PASTA_INVALIDA` vindo da resolucao encerra so a subida daquele destino, a pasta fica onde esta e a organizacao fecha como `desfeita` `[DECISAO: a limpeza e opcional e levantar nela deixaria a organizacao sem fechar para sempre, com todos os arquivos ja restaurados]`.
+- Interface: o erro cai em `OrganizeTab._on_undo_failed` (`organize_tab.py:384`): o resumo mostra a mensagem de `PASTA_INVALIDA` e o botao "Desfazer última organização" continua habilitado, porque `last_undoable` ainda devolve a organizacao.
+- Efeitos: so o que o desfazer ja faz; nada novo no disco nem no banco.
+
+Testes obrigatorios (arquivo novo `tests/services/test_undo_loop.py`, no estilo de `tests/services/test_undo.py`; reaproveitam `_plan`, `_statuses` e as fixtures `conn` e `folder`, copiando-as ou importando de la):
+
+1. `Path.resolve` trocado por `monkeypatch` para levantar `RuntimeError("Symlink loop")` so para o `source_path` da operacao: `undo_last` levanta `FilePilotError` com `code == "PASTA_INVALIDA"`, `message` igual ao texto de 6, sem `Symlink loop` nele e com `__cause__` `RuntimeError`; o status continua `movido`; o arquivo continua no destino; `OPERATION_LOCK.acquire(blocking=False)` e verdadeiro depois do erro (e liberado em seguida).
+2. O mesmo com `OSError(errno.ELOOP, ...)`: `PASTA_INVALIDA`. Com `OSError(errno.EACCES, ...)`: continua `OSError`, sem virar `PASTA_INVALIDA`.
+3. Laco real: organizacao e operacao inseridas no banco com `folder_path` apontando para um link que aponta para si mesmo e `source_path` dentro dele; o destino e um arquivo real. `undo_last` levanta `PASTA_INVALIDA` e a arvore do disco fica identica. `pytest.skip` se o sistema recusar criar o link, exceto no runner do GitHub Actions no Windows, onde falha (45.4).
+4. Falha no meio: plano de dois arquivos, `Path.resolve` falha so para o `source_path` da operacao de `seq` 1 (processada por ultimo). O primeiro desfazer levanta `PASTA_INVALIDA`; a operacao de `seq` 2 esta `restaurado` e no lugar; a de `seq` 1 esta `movido`; `last_undoable(conn)` ainda devolve a organizacao; `conn.in_transaction` e `False`. Com o `monkeypatch` desfeito, o segundo desfazer restaura o arquivo de `seq` 1 e `last_undoable(conn)` passa a `None`.
+5. Laco so na limpeza: `Path.resolve` falha so para a pasta `folder / "Documentos"`: `undo_last` devolve `UndoResult` com `restored_count` igual ao total, `removed_folders == []`, a pasta `Documentos` continua existindo e a organizacao fica `desfeita`.
+6. Interface (arquivo novo `tests/ui/test_undo_loop.py`, com `_window`, `_organize` e `_undo` copiados de `tests/ui/test_undo_button.py`; qualquer fixture com `yield` segue a regra de `Iterator` de 45.7): depois de organizar, `organize_worker_module.undo_last` trocado por uma funcao que levanta `FilePilotError("PASTA_INVALIDA", <texto de 6>)`: `tab.summary.text()` e o texto de 6, nao e "Ocorreu um erro inesperado. Tente de novo.", `tab.undo_button.isEnabled()` e `window.organizing is False`.
+
+### 45.4 D3: laco de atalhos provado tambem no Windows
+
+Substitui, no comportamento de `scanner.resolve_folder` descrito em 37.5, a deteccao do laco: ela deixa de depender so de `Path.resolve()`. O resto de 27.2 e 37.5 (mensagem, codigo, `raise ... from exc`, `OSError` que nao e laco continua subindo) fica como esta.
+
+- Hoje: `resolve_folder` (`scanner.py:52` a `:61`) so converte em `PASTA_INVALIDA` o que `Path.resolve()` levanta (`RuntimeError`, `OSError` com `errno.ELOOP` ou `winerror` 1921). No Windows, o `Path.resolve()` do Python 3.12 trata o erro 1921 como caminho inexistente e devolve o caminho sem resolver `[DECISAO: leitura do codigo de ntpath do Python 3.12, nao medida nesta execucao, que roda no Linux; a prova no Windows e o teste 2 abaixo, no runner windows-latest]`. O teste `test_laco_real_no_destino_vira_pasta_invalida_e_a_arvore_fica_identica` (`tests/services/test_planner_loop.py:95` a `:113`) faz `pytest.skip` quando `resolve` nao levanta (`:105`): no Windows ele e pulado.
+- Novo helper privado `_crosses_symlink_loop(path: Path) -> bool` em `scanner.py`: percorre o caminho absoluto componente a componente a partir da raiz; a cada componente em que `Path.is_symlink()` e verdadeiro, le o alvo com `os.readlink`, soma um salto e continua pelo alvo (absoluto recomeca da raiz do alvo; relativo continua a partir da pasta do link); `..` sobe um nivel; passou de 40 saltos, devolve `True` `[DECISAO: 40 e o limite de saltos do Linux (MAXSYMLINKS); laco de verdade passa de 40 sempre]`. Alvo com prefixo `\\?\` devolvido pelo Windows e aceito como veio.
+- Ordem fixa em `resolve_folder` `[DECISAO: aprovada no enriquecimento; sugestao 2]`: primeiro o `resolve()` com o tratamento atual de 27.2 e 37.5 (`RuntimeError`, `OSError` com `errno.ELOOP` e `winerror` 1921 viram `PASTA_INVALIDA` com `raise ... from`); so se ele devolver sem erro, chama `_crosses_symlink_loop(folder)` e, se verdadeiro, levanta `PASTA_INVALIDA` sem causa original (`__cause__` e `None`). Os chamadores (`scan_folder`, `build_plan`, `undo`) nao mudam.
+- `_crosses_symlink_loop` nunca levanta `[DECISAO: aprovada no enriquecimento; sugestao 3]`: `OSError` em `Path.is_symlink` ou em `os.readlink` (link apagado entre as duas chamadas, pasta sem permissao no caminho) para a travessia e devolve `False`, deixando a decisao para o `resolve()` que ja rodou. So o laco medido vira `PASTA_INVALIDA`.
+- Medicao feita nesta execucao (Linux, Python 3.12.3): o algoritmo acima devolve `True` para `link -> link` e para o ciclo `a -> b -> a`, e `False` para link valido e caminho inexistente.
+- Nao muda: a mensagem fixa de 6; junction do Windows (`mklink /J`) fica como esta, fora de escopo.
+- Efeitos: so le o disco (`lstat` e `readlink`).
+
+Testes obrigatorios (alteram `tests/services/test_planner_loop.py` e `tests/services/test_scanner_loop.py`; o helper `_symlink` ganha a regra: falha de criacao do link faz `pytest.skip`, exceto com `sys.platform == "win32"` e `os.environ.get("GITHUB_ACTIONS") == "true"`, onde faz `pytest.fail` `[DECISAO: no runner windows-latest o link e criavel; pular la esconderia o defeito]`):
+
+1. Emulacao do Windows, roda no Linux: `Path.resolve` trocado por `monkeypatch` por `lambda self, strict=False: self` e laco real `folder / "Documentos" -> si mesmo`: `build_plan(folder, [a.pdf], [])` levanta `PASTA_INVALIDA` com a mensagem de 6 e a arvore da pasta fica identica.
+2. Remove o `try/except` e o `pytest.skip("Path.resolve nao detecta o laco nesta plataforma")` de `test_laco_real_no_destino_vira_pasta_invalida_e_a_arvore_fica_identica`: o teste roda e passa no Linux e no runner Windows.
+3. Mesma emulacao com `scan_folder(folder)`, `folder` sendo o link que aponta para si mesmo: `PASTA_INVALIDA`.
+4. Ciclo de dois links `a -> b -> a` com a emulacao: `PASTA_INVALIDA`.
+5. Link valido dentro da pasta (`Documentos -> destino_real` com ambos dentro de `folder`): `build_plan` devolve o plano, sem `PASTA_INVALIDA`.
+6. Os testes existentes de `tests/services/test_planner_loop.py` e `tests/services/test_scanner_loop.py` continuam passando.
+7. Ordem: com `Path.resolve` trocado por `lambda self, strict=False: self` e laco real, o `PASTA_INVALIDA` da travessia tem `__cause__ is None`; com `Path.resolve` levantando `RuntimeError("Symlink loop")`, o `PASTA_INVALIDA` tem `__cause__` `RuntimeError` e `scanner._crosses_symlink_loop`, trocado por um espiao, nao e chamado.
+8. `os.readlink` trocado por `monkeypatch` para levantar `OSError(errno.EACCES, "Permission denied")` sobre um link real: `_crosses_symlink_loop` devolve `False` sem levantar e `build_plan` devolve o plano normal.
+9. `Path.is_symlink` trocado por `monkeypatch` para levantar `PermissionError` em qualquer caminho: `_crosses_symlink_loop` devolve `False` sem levantar.
+
+### 45.5 D4: barra de progresso some ao desfazer
+
+Acrescenta a 7.2, na linha "Desfazer última organização": ao iniciar o desfazer, a barra de progresso e escondida.
+
+- Hoje: `OrganizeTab._start_organization` mostra a barra (`organize_tab.py:300`) e `_on_finished` a deixa no total (`:322`). `refresh`, `simulate` e `organize` a escondem (`:251`, `:260` e `:269`); `undo` (`:349` a `:365`), `_on_undone` (`:367` a `:382`) e `_on_undo_failed` (`:384` a `:390`) nao. Depois de organizar e desfazer, a barra continua visivel em "N de N arquivos" sem organizacao em andamento.
+- Novo: `undo` chama `self.progress.setVisible(False)` depois da guarda de `:352` a `:356` (so quando o desfazer realmente comeca), antes de criar o `UndoWorker`. Desfazer sem `_db_path` (resumo "Não foi possível acessar o histórico do FilePilot.") e desfazer sem organizacao desfazivel nao escondem nada `[DECISAO: nao rodou nada, entao a barra do ultimo estado fica como esta]`.
+- Vale para os tres desfechos do desfazer (concluido, falha de contrato e falha inesperada), porque a barra e escondida no inicio.
+- Nao muda: o botao "Ver detalhes" (continua como esta; `organize` ja o esconde ao iniciar uma nova organizacao), a barra de uma nova organizacao (`setRange` e `setVisible(True)` de `:298` a `:300`) e o texto `"%v de %m arquivos"`.
+- Efeitos: so a visibilidade de um widget.
+
+Testes obrigatorios (arquivo novo `tests/ui/test_undo_progress.py`, no estilo de `tests/ui/test_undo_button.py`, com `_window`, `_organize` e `_undo` copiados dele; qualquer fixture com `yield` segue a regra de `Iterator` de 45.7; a visibilidade e lida com `isHidden()`, que nao depende de a janela estar mostrada):
+
+1. Depois de `_organize`, `tab.progress.isHidden()` e `False` e `tab.progress.value() == tab.progress.maximum()`; depois de `_undo`, `tab.progress.isHidden()` e `True`.
+2. Durante o desfazer (worker lento com `threading.Event`, como em `test_durante_o_desfazer_a_janela_nao_fecha_e_os_botoes_ficam_desabilitados`), a barra ja esta escondida antes do `release.set()`.
+3. Desfazer que falha com `RuntimeError` no `undo_last` trocado por `monkeypatch` (como `test_falha_inesperada_no_desfazer_mostra_o_texto_generico`): barra escondida.
+4. Organizacao de outra pasta: depois de `_organize` (barra visivel), uma organizacao de outra pasta e inserida no banco com `started_at="2999-01-01T00:00:00Z"` (como em `test_organizacao_de_outra_pasta_nao_rele_a_pasta_atual`) e `tab.refresh_undo()` roda; depois de `_undo`, a barra esta escondida. Sem o `_organize` a barra ja nasce escondida e o teste passaria antes da correcao.
+5. Depois de `_organize` (barra visivel), `tab._undoable = None` atribuido direto e `tab.undo()` chamado: a guarda de `organize_tab.py:352` retorna e a barra continua visivel.
+6. Organizar de novo depois do desfazer mostra a barra de novo e termina com `value() == maximum()`.
+
+### 45.6 D5: testes que travam em vez de falhar
+
+Acrescenta uma regra a `tests/`: nenhum teste depende de uma caixa de dialogo real nem de leitura sem limite de tempo. Nao muda codigo do produto.
+
+- Medicao feita nesta execucao (Python 3.12.3, `pytest-qt` com `qapp`): um teste que chama `app_main.open_main_window` com `QLockFile` falso devolvendo `LockFailedError` e sem espiao em `QMessageBox.information` nao termina; o `timeout 15` do shell o encerra com saida 124. Sem `QApplication` o mesmo codigo aborta com saida 134.
+- Causas: `QMessageBox.information` e `.critical` reais abrem dialogo modal. Em `tests/ui/test_single_instance.py` quatro testes nao usam espiao (`test_pasta_de_dados_inexistente_e_criada_antes_da_trava`, `test_trava_e_liberada_no_close_event`, `test_define_o_tempo_de_trava_velha` e `test_trava_velha_de_processo_que_caiu_e_recuperada`). Em `tests/ui/test_undo_button.py`, `_organize` roda a organizacao real e `OrganizeTab._on_failed` (`organize_tab.py:338` a `:345`) chama `QMessageBox.critical`. Alem disso, `holder.stdout.readline()` (`test_single_instance.py:130`) nao tem limite de tempo.
+- Novo `tests/conftest.py` com a fixture `autouse` `_no_modal_dialogs`: troca `QMessageBox.information`, `.warning`, `.critical` e `.question` por funcoes que levantam `AssertionError("caixa de dialogo inesperada (<nome>): <titulo>: <texto>")`. Os testes que esperam o dialogo continuam trocando o metodo por um espiao com `monkeypatch.setattr`, que vence a fixture.
+- Novo helper `_hold_lock(qtbot, lock_path) -> subprocess.Popen[str]` em `test_single_instance.py`: inicia o processo filho sem `stdout=PIPE`, espera com `qtbot.waitUntil(..., timeout=10_000)` ate `QLockFile(lock_path).getLockInfo()[0]` ser verdadeiro e falha com `AssertionError` se `holder.poll()` deixar de ser `None` antes disso `[DECISAO: getLockInfo so devolve verdadeiro depois que o filho escreveu o pid, e nao ha leitura bloqueante; medido nesta execucao no Linux: 0,1 s]`. O filho (`_HOLD_LOCK`) deixa de imprimir `locked`. `test_trava_velha_de_processo_que_caiu_e_recuperada` usa o helper.
+- Nao muda: o comportamento de `open_main_window`, de `OrganizeTab` e de `MainWindow`; os testes que ja usam espiao.
+
+Testes obrigatorios (arquivo novo `tests/test_no_modal_dialogs.py`, e um teste novo em `tests/ui/test_single_instance.py`):
+
+1. Com `qapp`, `QMessageBox.critical(None, "t", "x")` levanta `AssertionError` com `caixa de dialogo inesperada` em vez de bloquear.
+2. Com `qapp` e `QLockFile` falso devolvendo `LockFailedError`, sem espiao, `app_main.open_main_window(tmp_path)` levanta `AssertionError`.
+3. Com `OrganizeTab(conn)`, `tab._on_failed("ERRO_INTERNO", "x")` levanta `AssertionError` (o caminho que travava `_organize`).
+4. Um teste que troca o metodo por um espiao com `monkeypatch.setattr` recebe a chamada e nao levanta (a fixture nao impede o espiao).
+5. `test_filho_que_nao_trava_falha_em_vez_de_travar` em `test_single_instance.py`: `_HOLD_LOCK` trocado por `monkeypatch` por `"import sys; sys.exit(3)"`; `_hold_lock(qtbot, lock_path)` levanta `AssertionError` ou `pytestqt.exceptions.TimeoutError` (a excecao de `qtbot.waitUntil`, que nao e o `TimeoutError` embutido: medido nesta execucao, ela herda de `Exception`) em menos de 15 s.
+6. A suite inteira (`pytest`) continua passando: os 465 testes de hoje e os dos itens novos.
+
+### 45.7 D6: checagem de tipos cobre os testes
+
+Substitui, em 19.2, o comando unico e a frase "A pasta tests/ fica fora da checagem de tipos; nenhum item, gate ou workflow a checa." junto com o `[DECISAO: aprovada no enriquecimento; diverge de comportamento atual de mypy . no workflow]` dela. O resto de 19 fica como esta.
+
+- Medicao feita nesta execucao (mypy 2.4.0, Python 3.12.3): `mypy .` e `mypy --platform win32 filepilot tests` dao os mesmos tres erros: `tests/ui/test_undo_button.py:25`, `tests/ui/test_history_tab.py:21` e `tests/ui/test_history_details.py:24`, todos `The return type of a generator function should be "Generator" or one of its supertypes [misc]`. `python -m mypy --platform win32 filepilot` passa.
+- Causa: a fixture `conn` tem `yield` e esta anotada `-> sqlite3.Connection`.
+- Correcao: nos tres arquivos, `from collections.abc import Iterator` e `def conn(tmp_path: Path) -> Iterator[sqlite3.Connection]:`. Nenhum outro teste muda.
+- Regra para os testes dos outros itens `[DECISAO: aprovada no enriquecimento; sugestao 1]`: toda fixture com `yield` em teste novo ou alterado e anotada `Iterator[tipo]`, com `from collections.abc import Iterator`, mesmo quando copiada de arquivo ainda nao corrigido. Sem isso, um item entregue antes deste copia a anotacao errada e quebra o comando novo. 45.2, 45.3 e 45.5 citam esta regra ao mandar copiar a fixture `conn`.
+- Novo comando unico, literalmente: `python -m mypy --platform win32 filepilot tests`, na raiz do repositorio, no Linux e no Windows, saida com `Success: no issues found` e codigo 0 `[DECISAO: so acrescenta tests ao comando de 19.2; a pasta packaging continua fora, como hoje no fluxo do GitHub Actions]`.
+- `.github/workflows/tests.yml:22` passa a `run: python -m mypy --platform win32 filepilot tests`; o nome e a ordem dos passos nao mudam. Os itens ja entregues (`filepilot-v1-1` a `filepilot-v1-13` e os `filepilot-fix*`) nao sao editados; os itens novos desta secao usam o comando novo.
+- Efeitos: so tipos e o workflow.
+
+Testes obrigatorios:
+
+1. `tests/test_typecheck_workflow.py` (estilo de `tests/test_repository_rules.py`, com `ROOT` por `pathlib`): le `.github/workflows/tests.yml` e confirma uma linha `run: python -m mypy --platform win32 filepilot tests` e nenhuma linha que, sem os espacos das pontas, seja exatamente `run: mypy . --no-error-summary` ou `run: python -m mypy --platform win32 filepilot` (a forma antiga sem `tests`, que e prefixo da nova e por isso so se compara a linha inteira).
+2. Gate do item, fora do pytest: `python -m mypy --platform win32 filepilot tests` termina com saida 0 e `Success: no issues found`.
+3. Os tres arquivos de teste alterados continuam passando no pytest.
+
+### 45.8 D7: .gitignore
+
+Acrescenta o arquivo `.gitignore` na raiz do repositorio. Nenhum arquivo rastreado muda.
+
+- Hoje: o repositorio nao tem `.gitignore`. Depois de rodar a suite na main, `git status --short` lista `filepilot/__pycache__/`, `tests/__pycache__/` e os demais `__pycache__/` como nao rastreados (medido nesta execucao); o mesmo acontece com `*.egg-info/` apos `pip install -e` (medido). `.mypy_cache/` e `.pytest_cache/` ja trazem o proprio `.gitignore` e nao aparecem (medido para o mypy); seus padroes entram no arquivo da raiz mesmo assim `[DECISAO: nao depender de um arquivo que a ferramenta cria sozinha]`.
+- Conteudo exato, uma linha por padrao, nesta ordem:
+
+```text
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+build/
+dist/
+```
+
+- `build/` e `dist/` sao as pastas de saida do PyInstaller (`packaging/filepilot.spec`, `.github/workflows/build.yml`) `[DECISAO: padroes minimos dos artefatos que o proprio fluxo do projeto gera; nao ha pasta rastreada com esses nomes]`.
+- Nao ignora: `.abt/`, `.github/`, `packaging/` e `*.spec` (o `filepilot.spec` e rastreado).
+- Efeitos: so o que o git mostra como nao rastreado.
+
+Testes obrigatorios (arquivo novo `tests/test_gitignore.py`, com `ROOT` por `pathlib` e `subprocess.run(["git", ...], cwd=ROOT)`; `pytest.skip` se `git` nao existir ou `ROOT` nao for um repositorio):
+
+1. `(ROOT / ".gitignore")` existe e tem exatamente as nove linhas acima.
+2. `git check-ignore -q` tem saida 0 para `filepilot/__pycache__/x.cpython-312.pyc`, `filepilot.egg-info/PKG-INFO`, `.mypy_cache/x`, `.pytest_cache/x`, `.venv/x`, `venv/x`, `build/x` e `dist/x`.
+3. `git check-ignore -q` tem saida 1 para `packaging/filepilot.spec`, `.abt/SPEC.md`, `.github/workflows/tests.yml` e `pyproject.toml`.
+4. `git ls-files -ci --exclude-standard` nao imprime nada: nenhum arquivo rastreado casa com o `.gitignore`.
+
+### 45.9 Pendencias para decisao
+
+Nenhuma decisao pendente nesta secao.
+
+Registro fora de escopo (nao e decisao pendente):
+
+1. Junction do Windows (`mklink /J`) em laco: `Path.is_symlink()` nao a reconhece e `_crosses_symlink_loop` nao a trata. Nao e um dos sete defeitos e NAO e corrigido aqui `[DECISAO: fora do escopo; registrado para nao se perder]`.
+2. O botao "Ver detalhes" continua visivel depois de desfazer a organizacao a que ele se refere (45.5); nao e um dos sete defeitos.
+3. A prova de D3 no Windows depende do teste 2 de 45.4 no runner `windows-latest`: a deteccao por `Path.is_symlink()` e `os.readlink` e medida no Linux, e a leitura do `ntpath` do Python 3.12 e a hipotese sobre o Windows. Se o runner nao detectar o laco, o item de D3 nao esta concluido.
+4. D5 so cobre os dialogos de `QMessageBox`; outro modal (`QFileDialog`) ja e trocado nos testes existentes por `monkeypatch`.
+
+### 45.10 Traceability Matrix
+
+| Item do escopo | Elementos da SPEC | Status | Origem |
+|---|---|---|---|
+| D1: organizacao com data invalida (ano 0001) nao derruba o Historico | 45.2; acrescenta a 7.4 | coberto | discovery-notes.md |
+| D2: desfazer com laco de atalho nao quebra com erro interno | 45.3; acrescenta a 6.5; reaproveita 37.5 | coberto | discovery-notes.md |
+| D3: recusa do laco provada tambem no Windows, sem teste pulado | 45.4; substitui a deteccao de 37.5 | coberto | discovery-notes.md |
+| D4: barra de progresso some depois de desfazer | 45.5; acrescenta a 7.2 | coberto | discovery-notes.md |
+| D5: testes de instancia unica e do botao de desfazer falham em vez de travar | 45.6 | coberto | discovery-notes.md |
+| D6: checagem de tipos cobre os testes; `mypy .` sem erros | 45.7; substitui o comando e a frase de 19.2 | coberto | discovery-notes.md |
+| D7: repositorio com `.gitignore` | 45.8 | coberto | discovery-notes.md |
+| Um item de correcao com teste por defeito | 45.2 a 45.8 (testes obrigatorios) | coberto | discovery-notes.md |
+| Fora de escopo: qualquer mudanca alem dos sete defeitos | 45.1; 45.9 | coberto | discovery-notes.md |
+| Metrica: cada defeito com teste que falha antes e passa depois | 45.2 a 45.8 | coberto | discovery-notes.md |
+| Metrica: `mypy .` sem erros | 45.7 | coberto | discovery-notes.md |
+| - | 45.2 `format_local_time` captura tambem `OverflowError` e `OSError` | - | `[DECISAO: no Windows o erro da mesma conversao e OSError]` |
+| - | 45.3 desfazer inteiro termina com `PASTA_INVALIDA` (opcao A) | - | `[DECISAO: aprovada pela pessoa na pergunta desta execucao; opcao A]` |
+| - | 45.3 laco na limpeza de pastas nao levanta erro | - | `[DECISAO: a limpeza e opcional e levantar deixaria a organizacao sem fechar]` |
+| - | 45.4 deteccao do laco por travessia, limite de 40 saltos | - | `[DECISAO: 40 e o limite de saltos do Linux]` |
+| - | 45.4 falha ao criar link no runner do GitHub Actions no Windows e falha, nao pulo | - | `[DECISAO: no runner o link e criavel; pular esconderia o defeito]` |
+| - | 45.5 a barra some no inicio do desfazer, so quando ele realmente comeca | - | `[DECISAO: sem desfazer nao ha o que esconder]` |
+| - | 45.6 `tests/conftest.py` com dialogos proibidos e `getLockInfo` no lugar de `readline` | - | `[DECISAO: falhar com erro e melhor que travar a suite]` |
+| - | 45.7 comando unico passa a ser `python -m mypy --platform win32 filepilot tests` | - | `[DECISAO: so acrescenta tests; packaging continua fora]` |
+| - | 45.8 nove padroes no `.gitignore`, sem ignorar `.abt/`, `.github/` e `*.spec` | - | `[DECISAO: padroes minimos dos artefatos que o projeto gera]` |
+| - | 45.7 fixture com `yield` em teste novo ou alterado anotada `Iterator[tipo]` | - | `[DECISAO: aprovada no enriquecimento; sugestao 1]` |
+| - | 45.4 ordem fixa: `resolve()` primeiro, travessia depois, sem causa original no laco da travessia | - | `[DECISAO: aprovada no enriquecimento; sugestao 2]` |
+| - | 45.4 `_crosses_symlink_loop` nunca levanta; `OSError` devolve `False` | - | `[DECISAO: aprovada no enriquecimento; sugestao 3]` |
