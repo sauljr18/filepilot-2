@@ -7,7 +7,18 @@ A aba Organizar esconde a barra de progresso quando um desfazer realmente comeca
 
 ## Contexto herdado
 
--
+Artefatos criados por filepilot-fix3-5 (commit a5d09ae):
+- filepilot/ui/history_tab.py - modulo - `format_local_time(started_at)` passa a devolver o `started_at` sem alteracao quando a conversao levanta `ValueError`, `OverflowError` ou `OSError`.
+- tests/ui/test_history_invalid_date.py - testes - data no ano 0001, `OSError` simulado em `history_tab.datetime` e aba Historico com duas organizacoes.
+
+Contratos:
+- `format_local_time(started_at: str) -> str` em filepilot/ui/history_tab.py: sem mudanca de assinatura nem do formato `dd/MM/yyyy HH:mm`. Armadilha: o `strftime` e o `astimezone` ficam dentro do mesmo `try`.
+
+Padroes estabelecidos:
+- Nos testes de interface, a fixture `conn` com yield e anotada `Iterator[sqlite3.Connection]` e `_add_organization` e copiada de tests/ui/test_history_tab.py (tests/ui/test_history_invalid_date.py L20-43).
+- Para simular erro do sistema operacional na conversao de data, `monkeypatch.setattr(history_tab_module, "datetime", <classe>)` com `strptime` que devolve objeto cujo `replace` devolve ele mesmo e cujo `astimezone` levanta `OSError` (tests/ui/test_history_invalid_date.py L46-57).
+
+filepilot-fix3-5 entregou o tratamento de data invalida no Historico e NAO toca em filepilot/ui/organize_tab.py: NAO reimplemente `format_local_time` aqui.
 
 ## Features
 
