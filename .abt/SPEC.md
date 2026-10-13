@@ -1470,3 +1470,7 @@ Item: filepilot-fix3-2 (filepilot-2)
 ## §48 Laco de atalhos detectado tambem no Windows
 
 Item: filepilot-fix3-3 (filepilot-2)
+
+## §49 Desfazer com laco de atalhos vira PASTA_INVALIDA
+
+Item: filepilot-fix3-4 (filepilot-2)
