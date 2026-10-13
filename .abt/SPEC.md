@@ -1474,3 +1474,7 @@ Item: filepilot-fix3-3 (filepilot-2)
 ## §49 Desfazer com laco de atalhos vira PASTA_INVALIDA
 
 Item: filepilot-fix3-4 (filepilot-2)
+
+## §50 Historico mostra a data como veio quando ela e invalida
+
+Item: filepilot-fix3-5 (filepilot-2)
