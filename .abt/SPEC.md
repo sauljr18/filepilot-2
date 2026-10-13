@@ -1482,3 +1482,7 @@ Item: filepilot-fix3-5 (filepilot-2)
 ## §51 Barra de progresso some ao desfazer a organizacao
 
 Item: filepilot-fix3-6 (filepilot-2)
+
+## §52 Testes de instancia unica e desfazer falham em vez de travar
+
+Item: filepilot-fix3-7 (filepilot-2)
