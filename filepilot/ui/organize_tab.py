@@ -354,6 +354,7 @@ class OrganizeTab(QWidget):
         if self._db_path is None:
             self.summary.setText(_DATABASE_UNAVAILABLE)
             return
+        self.progress.setVisible(False)
         worker = UndoWorker(self._db_path)
         worker.finished.connect(self._on_undone)
         worker.failed.connect(self._on_undo_failed)
