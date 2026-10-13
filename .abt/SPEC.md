@@ -1458,3 +1458,7 @@ Registro fora de escopo (nao e decisao pendente):
 | - | 45.7 fixture com `yield` em teste novo ou alterado anotada `Iterator[tipo]` | - | `[DECISAO: aprovada no enriquecimento; sugestao 1]` |
 | - | 45.4 ordem fixa: `resolve()` primeiro, travessia depois, sem causa original no laco da travessia | - | `[DECISAO: aprovada no enriquecimento; sugestao 2]` |
 | - | 45.4 `_crosses_symlink_loop` nunca levanta; `OSError` devolve `False` | - | `[DECISAO: aprovada no enriquecimento; sugestao 3]` |
+
+## §46 Checagem de tipos do mypy cobre a pasta de testes
+
+Item: filepilot-fix3-1 (filepilot-2)
