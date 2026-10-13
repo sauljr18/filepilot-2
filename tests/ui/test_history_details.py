@@ -1,4 +1,5 @@
 import sqlite3
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -21,7 +22,7 @@ DATABASE_UNAVAILABLE = "Não foi possível acessar o histórico do FilePilot."
 
 
 @pytest.fixture
-def conn(tmp_path: Path) -> sqlite3.Connection:
+def conn(tmp_path: Path) -> Iterator[sqlite3.Connection]:
     connection = open_connection(tmp_path / "db" / "filepilot.db")
     yield connection
     connection.close()

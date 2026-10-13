@@ -1,5 +1,6 @@
 import sqlite3
 import threading
+from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
 
@@ -22,7 +23,7 @@ CLOSE_BLOCKED = "Aguarde a organização terminar para fechar."
 
 
 @pytest.fixture
-def conn(tmp_path: Path) -> sqlite3.Connection:
+def conn(tmp_path: Path) -> Iterator[sqlite3.Connection]:
     connection = open_connection(tmp_path / "db" / "filepilot.db")
     yield connection
     connection.close()
