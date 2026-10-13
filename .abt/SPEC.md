@@ -1478,3 +1478,7 @@ Item: filepilot-fix3-4 (filepilot-2)
 ## §50 Historico mostra a data como veio quando ela e invalida
 
 Item: filepilot-fix3-5 (filepilot-2)
+
+## §51 Barra de progresso some ao desfazer a organizacao
+
+Item: filepilot-fix3-6 (filepilot-2)
