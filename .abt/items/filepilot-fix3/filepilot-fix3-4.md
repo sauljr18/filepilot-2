@@ -7,7 +7,20 @@ O desfazer com laco de atalhos em source_path ou em folder_path termina com PAST
 
 ## Contexto herdado
 
--
+Artefatos criados por filepilot-fix3-3 (commit 1c67015):
+- filepilot/services/scanner.py - modulo - `_crosses_symlink_loop(path: Path) -> bool` (privado, nunca levanta) e `_MAX_SYMLINK_HOPS = 40`.
+
+Contratos:
+- `resolve_folder(folder: Path) -> Path` em filepilot/services/scanner.py L85-97: ordem fixa. Primeiro `folder.resolve()` com `RuntimeError`, `OSError` com `errno.ELOOP` e `winerror` 1921 virando `PASTA_INVALIDA` com `raise ... from`; so se ele voltar sem erro chama `_crosses_symlink_loop(folder)`, que verdadeiro levanta `PASTA_INVALIDA` com `__cause__ is None`. Armadilha: `OSError` com `errno.EACCES` continua `OSError`. Assinatura e mensagem nao mudaram; `undo.py` so troca as chamadas de `resolve()`.
+
+Nomes decididos:
+- Nos testes, `_windows_resolve(self, strict=False)` devolve `self` e emula o `Path.resolve` do Windows que nao enxerga o laco.
+
+Padroes estabelecidos:
+- O helper `_symlink` dos testes de laco faz `pytest.skip` se o sistema recusa o link, exceto com `sys.platform == "win32"` e `GITHUB_ACTIONS` igual a `true`, onde faz `pytest.fail` (tests/services/test_planner_loop.py L27-33).
+- Para provar a travessia sem depender de `is_dir`, use um espiao em `scanner._crosses_symlink_loop` via `monkeypatch` (tests/services/test_scanner_loop.py L142 e L163).
+
+filepilot-fix3-3 entregou o helper de travessia e a ordem fixa em `resolve_folder`; NAO reimplemente nem duplique a deteccao de laco em `undo.py`: chame `resolve_folder`.
 
 ## Features
 
