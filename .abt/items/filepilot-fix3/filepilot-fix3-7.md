@@ -7,7 +7,18 @@ Nenhum teste de instancia unica ou do botao de desfazer bloqueia a suite por cau
 
 ## Contexto herdado
 
--
+Artefatos criados por filepilot-fix3-6 (commit 80cf4e3):
+- filepilot/ui/organize_tab.py - modulo - `OrganizeTab.undo` passa a chamar `self.progress.setVisible(False)` (L357), depois das guardas de `_undoable` e `_db_path` e antes de criar o `UndoWorker`.
+- tests/ui/test_undo_progress.py - testes - seis testes da barra de progresso ao desfazer, com `_window`, `_organize`, `_undo` e `_MessageSpy` copiados de tests/ui/test_undo_button.py (em tests/ui/test_undo_progress.py L46-84).
+
+Contratos:
+- `OrganizeTab.undo()` e `OrganizeTab._on_failed(code, message)` em filepilot/ui/organize_tab.py: sem mudanca de assinatura. `_on_failed` (L338-345) continua chamando `QMessageBox.critical` e nao muda aqui. Armadilha: o `setVisible(False)` do `undo` fica depois das guardas; nao o mova para antes delas.
+
+Padroes estabelecidos:
+- Nos testes de interface, a visibilidade da barra e lida com `isHidden()`, que nao depende de a janela estar mostrada, e todo teste que prova o sumico roda `_organize` antes (tests/ui/test_undo_progress.py L86-98).
+- Para provar o estado no meio do desfazer, o `undo_last` e trocado por `monkeypatch` por uma funcao lenta que espera um `threading.Event`, e o teste solta o evento dentro de `qtbot.waitSignal(tab.organizing_changed, ...)` (tests/ui/test_undo_progress.py L101-128).
+
+filepilot-fix3-6 entregou a barra escondida ao desfazer e NAO toca em filepilot/__main__.py nem em tests/ui/test_single_instance.py: NAO reimplemente `OrganizeTab.undo` aqui.
 
 ## Features
 
