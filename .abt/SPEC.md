@@ -1466,3 +1466,7 @@ Item: filepilot-fix3-1 (filepilot-2)
 ## §47 Arquivo .gitignore na raiz do repositorio
 
 Item: filepilot-fix3-2 (filepilot-2)
+
+## §48 Laco de atalhos detectado tambem no Windows
+
+Item: filepilot-fix3-3 (filepilot-2)
