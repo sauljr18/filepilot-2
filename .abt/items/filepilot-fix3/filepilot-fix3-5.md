@@ -7,7 +7,17 @@ A aba Historico carrega a pagina e mostra o started_at sem alteracao quando ele 
 
 ## Contexto herdado
 
--
+Artefatos criados por filepilot-fix3-4 (commit 3ac38f8):
+- filepilot/services/undo.py - modulo - `undo_last(conn)` passa a poder levantar `FilePilotError` com `code == "PASTA_INVALIDA"`; `_is_inside` e a subida de `_remove_empty_folders` resolvem por `resolve_folder`.
+
+Contratos:
+- `undo_last(conn) -> UndoResult` em filepilot/services/undo.py: laco de atalhos em `source_path` ou em `folder_path` levanta `PASTA_INVALIDA` com o texto de contrato; na limpeza de pastas vazias o laco encerra so a subida daquele destino e a organizacao fecha como `desfeita`. Armadilha: `OSError` com `errno.EACCES` continua `OSError`.
+
+Padroes estabelecidos:
+- Nos testes de servico, `_fail_resolve_for(target, error)` troca `Path.resolve` por `monkeypatch` e levanta so quando `self == target` (tests/services/test_undo_loop.py L21-30).
+- Nos testes de interface, `_window`, `_organize` e `_undo` sao copiados de tests/ui/test_undo_button.py e o servico e trocado por `monkeypatch` em `organize_worker_module.undo_last` (tests/ui/test_undo_loop.py L18-48).
+
+filepilot-fix3-4 entregou o tratamento de laco no desfazer e NAO toca em filepilot/ui/history_tab.py: NAO reimplemente a deteccao de laco aqui.
 
 ## Features
 
