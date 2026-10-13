@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QLockFile
+from pytestqt.exceptions import TimeoutError as QtTimeoutError
 from pytestqt.qtbot import QtBot
 
 from filepilot import __main__ as app_main
@@ -14,7 +15,6 @@ _HOLD_LOCK = (
     "from PySide6.QtCore import QLockFile\n"
     "lock = QLockFile(sys.argv[1])\n"
     "assert lock.tryLock(0)\n"
-    "print('locked', flush=True)\n"
     "time.sleep(60)\n"
 )
 
@@ -32,6 +32,28 @@ def info_spy(monkeypatch: pytest.MonkeyPatch) -> InfoSpy:
     spy = InfoSpy()
     monkeypatch.setattr(app_main.QMessageBox, "information", spy)
     return spy
+
+
+def _hold_lock(qtbot: QtBot, lock_path: Path) -> subprocess.Popen[str]:
+    """Inicia o processo que segura a trava e espera ate ele escrever o pid."""
+    holder = subprocess.Popen(
+        [sys.executable, "-I", "-c", _HOLD_LOCK, str(lock_path)], text=True
+    )
+
+    def locked_or_dead() -> bool:
+        return holder.poll() is not None or bool(
+            QLockFile(str(lock_path)).getLockInfo()[0]
+        )
+
+    try:
+        qtbot.waitUntil(locked_or_dead, timeout=10_000)
+        assert holder.poll() is None, "o processo filho terminou sem segurar a trava"
+    except BaseException:
+        if holder.poll() is None:
+            holder.kill()
+        holder.wait(timeout=10)
+        raise
+    return holder
 
 
 def _forbid_window(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -120,22 +142,14 @@ def test_trava_velha_de_processo_que_caiu_e_recuperada(
     qtbot: QtBot, tmp_path: Path
 ) -> None:
     lock_path = tmp_path / "filepilot.lock"
-    holder = subprocess.Popen(
-        [sys.executable, "-I", "-c", _HOLD_LOCK, str(lock_path)],
-        stdout=subprocess.PIPE,
-        text=True,
-    )
+    holder = _hold_lock(qtbot, lock_path)
     try:
-        assert holder.stdout is not None
-        assert holder.stdout.readline().strip() == "locked"
         holder.kill()
         holder.wait(timeout=10)
     finally:
         if holder.poll() is None:
             holder.kill()
             holder.wait(timeout=10)
-        if holder.stdout is not None:
-            holder.stdout.close()
     assert lock_path.exists()
 
     window = app_main.open_main_window(tmp_path)
@@ -143,3 +157,12 @@ def test_trava_velha_de_processo_que_caiu_e_recuperada(
     assert isinstance(window, MainWindow)
     qtbot.addWidget(window)
     window.close()
+
+
+def test_filho_que_nao_trava_falha_em_vez_de_travar(
+    qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(sys.modules[__name__], "_HOLD_LOCK", "import sys; sys.exit(3)")
+
+    with pytest.raises((AssertionError, QtTimeoutError)):
+        _hold_lock(qtbot, tmp_path / "filepilot.lock")
