@@ -1462,3 +1462,7 @@ Registro fora de escopo (nao e decisao pendente):
 ## §46 Checagem de tipos do mypy cobre a pasta de testes
 
 Item: filepilot-fix3-1 (filepilot-2)
+
+## §47 Arquivo .gitignore na raiz do repositorio
+
+Item: filepilot-fix3-2 (filepilot-2)
