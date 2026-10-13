@@ -61,9 +61,9 @@ def format_local_time(started_at: str) -> str:
     """`started_at` (UTC, ISO 8601 com Z) no horario local, `dd/MM/yyyy HH:mm`."""
     try:
         moment = datetime.strptime(started_at, "%Y-%m-%dT%H:%M:%SZ")
-    except ValueError:
+        return moment.replace(tzinfo=UTC).astimezone().strftime("%d/%m/%Y %H:%M")
+    except (ValueError, OverflowError, OSError):
         return started_at
-    return moment.replace(tzinfo=UTC).astimezone().strftime("%d/%m/%Y %H:%M")
 
 
 class _TextTableModel(QAbstractTableModel):
