@@ -14,6 +14,7 @@ from pathlib import Path
 from filepilot.domain.errors import FilePilotError
 from filepilot.services.history import last_undoable
 from filepilot.services.organizer import OPERATION_LOCK
+from filepilot.services.scanner import resolve_folder
 
 _MESSAGES = {
     "NADA_PARA_DESFAZER": "Não há organização para desfazer.",
@@ -44,7 +45,7 @@ def _utc_now() -> str:
 
 
 def _is_inside(folder: Path, path: Path) -> bool:
-    return path.resolve().is_relative_to(folder.resolve())
+    return resolve_folder(path).is_relative_to(resolve_folder(folder))
 
 
 def _restore_file(folder: Path, source: Path, destination: Path) -> str | None:
@@ -91,7 +92,9 @@ def _remove_empty_folders(folder: Path, destinations: list[Path]) -> list[str]:
     """Remove as pastas de destino vazias, subindo ate a pasta escolhida (6.5).
 
     `rmdir` so apaga pasta vazia: nenhum arquivo pode se perder aqui. A pasta
-    escolhida nunca e removida.
+    escolhida nunca e removida. Laco de atalhos numa pasta encerra so a subida
+    daquele destino: a limpeza e opcional e nao pode deixar a organizacao
+    aberta (SPEC 45.3).
     """
     removed: list[str] = []
     seen: set[Path] = set()
@@ -100,13 +103,18 @@ def _remove_empty_folders(folder: Path, destinations: list[Path]) -> list[str]:
         if current in seen:
             continue
         seen.add(current)
-        while current.resolve() != folder.resolve() and _is_inside(folder, current):
-            try:
-                current.rmdir()
-            except OSError:
-                break
-            removed.append(str(current))
-            current = current.parent
+        try:
+            while resolve_folder(current) != resolve_folder(folder) and _is_inside(
+                folder, current
+            ):
+                try:
+                    current.rmdir()
+                except OSError:
+                    break
+                removed.append(str(current))
+                current = current.parent
+        except FilePilotError:
+            continue
     return removed
 
 
@@ -153,8 +161,10 @@ def undo_last(conn: sqlite3.Connection) -> UndoResult:
     """Desfaz a ultima organizacao desfazivel (6.5).
 
     Levanta `ORGANIZACAO_EM_ANDAMENTO` durante uma organizacao,
-    `NADA_PARA_DESFAZER` sem organizacao desfazivel e `BANCO_INDISPONIVEL`
-    em falha do banco.
+    `NADA_PARA_DESFAZER` sem organizacao desfazivel, `BANCO_INDISPONIVEL`
+    em falha do banco e `PASTA_INVALIDA` com laco de atalhos na pasta ou num
+    caminho original. O que ja foi restaurado continua restaurado e a
+    organizacao nao fica desfeita.
     """
     if not OPERATION_LOCK.acquire(blocking=False):
         raise _error("ORGANIZACAO_EM_ANDAMENTO")
