@@ -1,4 +1,6 @@
 import errno
+import os
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -26,7 +28,14 @@ def _symlink(link: Path, target: Path) -> None:
     try:
         link.symlink_to(target, target_is_directory=True)
     except (OSError, NotImplementedError):
+        if sys.platform == "win32" and os.environ.get("GITHUB_ACTIONS") == "true":
+            pytest.fail("o sistema recusou criar o link simbolico")
         pytest.skip("o sistema recusou criar o link simbolico")
+
+
+def _windows_resolve(self: Path, strict: bool = False) -> Path:
+    """Emula o Path.resolve do Windows, que nao enxerga o laco e devolve o caminho como veio."""
+    return self
 
 
 def _file(folder: Path, name: str) -> ScannedFile:
@@ -97,12 +106,6 @@ def test_laco_real_no_destino_vira_pasta_invalida_e_a_arvore_fica_identica(
 ) -> None:
     folder = _folder_with_pdf(tmp_path)
     _symlink(folder / "Documentos", folder / "Documentos")
-    try:
-        (folder / "Documentos" / "a.pdf").resolve()
-    except (RuntimeError, OSError):
-        pass
-    else:
-        pytest.skip("Path.resolve nao detecta o laco nesta plataforma")
     before = _tree(folder)
 
     with pytest.raises(FilePilotError) as info:
@@ -111,6 +114,90 @@ def test_laco_real_no_destino_vira_pasta_invalida_e_a_arvore_fica_identica(
     assert info.value.code == "PASTA_INVALIDA"
     assert info.value.message == INVALID_MESSAGE
     assert _tree(folder) == before
+
+
+def test_laco_real_com_resolve_do_windows_vira_pasta_invalida_e_a_arvore_fica_identica(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder = _folder_with_pdf(tmp_path)
+    _symlink(folder / "Documentos", folder / "Documentos")
+    before = _tree(folder)
+    monkeypatch.setattr(Path, "resolve", _windows_resolve)
+
+    with pytest.raises(FilePilotError) as info:
+        build_plan(folder, [_file(folder, "a.pdf")], [])
+
+    assert info.value.code == "PASTA_INVALIDA"
+    assert info.value.message == INVALID_MESSAGE
+    assert info.value.__cause__ is None
+    assert _tree(folder) == before
+
+
+def test_laco_de_dois_atalhos_com_resolve_do_windows_vira_pasta_invalida(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder = _folder_with_pdf(tmp_path)
+    _symlink(folder / "Documentos", folder / "outro")
+    _symlink(folder / "outro", folder / "Documentos")
+    monkeypatch.setattr(Path, "resolve", _windows_resolve)
+
+    with pytest.raises(FilePilotError) as info:
+        build_plan(folder, [_file(folder, "a.pdf")], [])
+
+    assert info.value.code == "PASTA_INVALIDA"
+    assert info.value.message == INVALID_MESSAGE
+
+
+def test_atalho_valido_dentro_da_pasta_nao_impede_o_plano(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder = _folder_with_pdf(tmp_path)
+    real = folder / "destino_real"
+    real.mkdir()
+    _symlink(folder / "Documentos", real)
+    monkeypatch.setattr(Path, "resolve", _windows_resolve)
+
+    plan = build_plan(folder, [_file(folder, "a.pdf")], [])
+
+    assert [item.destination_path for item in plan.operations] == [
+        folder / "Documentos" / "a.pdf"
+    ]
+
+
+def test_atalho_valido_dentro_da_pasta_nao_impede_o_plano_com_o_resolve_real(
+    tmp_path: Path,
+) -> None:
+    folder = _folder_with_pdf(tmp_path)
+    real = folder / "destino_real"
+    real.mkdir()
+    _symlink(folder / "Documentos", real)
+
+    plan = build_plan(folder, [_file(folder, "a.pdf")], [])
+
+    assert [item.destination_path for item in plan.operations] == [
+        folder / "Documentos" / "a.pdf"
+    ]
+
+
+def test_readlink_negado_na_travessia_nao_impede_o_plano(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    folder = _folder_with_pdf(tmp_path)
+    real = folder / "destino_real"
+    real.mkdir()
+    _symlink(folder / "Documentos", real)
+    monkeypatch.setattr(Path, "resolve", _windows_resolve)
+
+    def fake_readlink(path: str | os.PathLike[str]) -> str:
+        raise OSError(errno.EACCES, "Permission denied")
+
+    monkeypatch.setattr(os, "readlink", fake_readlink)
+
+    plan = build_plan(folder, [_file(folder, "a.pdf")], [])
+
+    assert [item.destination_path for item in plan.operations] == [
+        folder / "Documentos" / "a.pdf"
+    ]
 
 
 def test_laco_real_em_subpasta_que_nenhum_arquivo_usa_nao_impede_o_plano(

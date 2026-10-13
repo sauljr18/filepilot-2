@@ -32,6 +32,9 @@ _DRIVE_UNKNOWN = 0
 # ERROR_CANT_RESOLVE_FILENAME: laco de atalhos no Windows.
 _WINERROR_CANT_RESOLVE = 1921
 
+# Limite de saltos de link da travessia (MAXSYMLINKS do Linux).
+_MAX_SYMLINK_HOPS = 40
+
 
 def _error(code: str) -> FilePilotError:
     return FilePilotError(code, _MESSAGES[code])
@@ -49,16 +52,49 @@ def _drive_type(anchor: str) -> int:
     return int(ctypes.windll.kernel32.GetDriveTypeW(anchor))
 
 
-def resolve_folder(folder: Path) -> Path:
-    """Resolve a pasta uma unica vez; laco de atalhos vira PASTA_INVALIDA (27.2)."""
+def _crosses_symlink_loop(path: Path) -> bool:
+    """True se a travessia passa de 40 saltos de link (45.4); nunca levanta."""
+    absolute = path if path.is_absolute() else Path.cwd() / path
+    current = Path(absolute.anchor)
+    pending = list(reversed(absolute.parts[1:]))
+    hops = 0
     try:
-        return folder.resolve()
+        while pending:
+            part = pending.pop()
+            if part == "..":
+                current = current.parent
+                continue
+            candidate = current / part
+            if not candidate.is_symlink():
+                current = candidate
+                continue
+            hops += 1
+            if hops > _MAX_SYMLINK_HOPS:
+                return True
+            target = Path(os.readlink(candidate))
+            if target.is_absolute():
+                current = Path(target.anchor)
+                pending.extend(reversed(target.parts[1:]))
+            else:
+                pending.extend(reversed(target.parts))
+    except OSError:
+        return False
+    return False
+
+
+def resolve_folder(folder: Path) -> Path:
+    """Resolve a pasta uma unica vez; laco de atalhos vira PASTA_INVALIDA (27.2, 45.4)."""
+    try:
+        resolved = folder.resolve()
     except RuntimeError as exc:
         raise _error("PASTA_INVALIDA") from exc
     except OSError as exc:
         if exc.errno == errno.ELOOP or getattr(exc, "winerror", None) == _WINERROR_CANT_RESOLVE:
             raise _error("PASTA_INVALIDA") from exc
         raise
+    if _crosses_symlink_loop(folder):
+        raise _error("PASTA_INVALIDA")
+    return resolved
 
 
 def _protected_root(variable: str, default: str) -> Path:
