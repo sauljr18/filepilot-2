@@ -1550,3 +1550,7 @@ Nenhuma pendencia para decisao.
 | - | 54.2 comparacao exata de `sys.argv[1:]` com `["--version"]` | - | `[DECISAO: comparacao exata de sys.argv[1:]; qualquer outra lista de argumentos, inclusive --version com mais argumentos, segue o caminho de hoje]` |
 | - | 54.2 sem saida padrao, `main()` devolve 0 sem excecao (teste 5) | - | `[DECISAO: aprovada no enriquecimento; sugestao 1]` |
 | - | 54.2 sem parser de argumentos | - | `[DECISAO: um parser recusaria argumentos que o Qt aceita hoje pela QApplication(sys.argv), mudando o comportamento sem argumento de versao]` |
+
+## §55 Opcao --version imprime a versao e sai sem abrir a janela
+
+Item: filepilot-version-1 (filepilot-2)
