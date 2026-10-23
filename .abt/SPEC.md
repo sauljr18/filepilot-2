@@ -1486,3 +1486,67 @@ Item: filepilot-fix3-6 (filepilot-2)
 ## §52 Testes de instancia unica e desfazer falham em vez de travar
 
 Item: filepilot-fix3-7 (filepilot-2)
+
+## 54. Opcao --version na linha de comando [DELTA 2026-10-23, python -m filepilot --version]
+
+### 54.1 Objetivo e fora de escopo
+
+`python -m filepilot --version` imprime a versao do FilePilot (o `__version__` de `filepilot/__init__.py`, hoje `"0.1.0"`, `filepilot/__init__.py:3`) e sai com codigo 0, sem abrir a interface grafica. Hoje `main()` (`filepilot/__main__.py:62` a `:69`) cria a `QApplication` e abre a janela em toda execucao, sem ler argumentos. Personas: Ana e Carlos (1), que conferem a versao instalada.
+
+Fora de escopo:
+
+- Outros argumentos de linha de comando (como `-V` e `--help`); NAO cria parser de argumentos.
+- Mudar o valor ou a fonte da versao: `filepilot/__init__.py` e `pyproject.toml:7` nao mudam.
+- A versao NAO aparece na janela do aplicativo (titulo, abas e dialogos de 7.1 ficam como estao).
+- Sem argumento, o aplicativo abre como hoje (7.1, 37.4).
+- O executavel do PyInstaller (§44, `packaging/filepilot.spec:34` com `console=False`) nao ganha saida visivel de versao `[DECISAO: o pedido cobre so python -m filepilot; o executavel sem console nao tem saida padrao]`.
+
+Sem dados, servicos novos, interface nova nem permissoes: so o ponto de entrada muda.
+
+### 54.2 Ponto de entrada com --version
+
+Acrescenta ao ponto de entrada de 7.1 (`filepilot/__main__.py`) um desvio antes da `QApplication`.
+
+- Novo: `filepilot/__main__.py` importa `from filepilot import __version__`. A primeira instrucao de `main()` e:
+
+```python
+if sys.argv[1:] == ["--version"]:
+    print(__version__)
+    return 0
+```
+
+- Saida: exatamente o valor de `__version__` seguido de uma quebra de linha na saida padrao (hoje `0.1.0\n`), nada na saida de erro, codigo de saida 0 (pelo `sys.exit(main())` de `filepilot/__main__.py:72` e `:73`, que nao muda).
+- Sem saida padrao (`pythonw -m filepilot --version`, `sys.stdout` igual a `None`): `main()` devolve 0 sem excecao e sem nada na saida de erro; `print` com `sys.stdout` `None` nao faz nada (medido nesta execucao, Python 3.12), entao a escrita fica no `print`, nunca em `sys.stdout.write` `[DECISAO: aprovada no enriquecimento; sugestao 1]`.
+- Nesse caminho `main()` NAO cria `QApplication`, NAO chama `default_data_dir()` nem `open_main_window()`: nao cria a pasta de dados, nao toma a trava `filepilot.lock`, nao abre o banco e nao mostra janela nem `QMessageBox`.
+- So o argumento unico `--version` desvia `[DECISAO: comparacao exata de sys.argv[1:]; qualquer outra lista de argumentos, inclusive --version com mais argumentos, segue o caminho de hoje]`. Sem parser de argumentos `[DECISAO: um parser recusaria argumentos que o Qt aceita hoje pela QApplication(sys.argv), mudando o comportamento sem argumento de versao]`.
+- `main()` continua `def main() -> int:` sem parametros; os testes trocam `sys.argv` por `monkeypatch`.
+- Nao muda: as importacoes de PySide6 no topo de `__main__.py` (`:6` e `:7`), o caminho sem `--version` (`:63` a `:69`), `open_main_window`, `MainWindow` e o docstring do modulo.
+
+Testes obrigatorios (arquivo novo `tests/test_version_cli.py`, no estilo de `tests/test_import.py`; toda fixture com `yield` segue a regra de `Iterator` de 45.7):
+
+1. Subprocesso real: `subprocess.run([sys.executable, "-m", "filepilot", "--version"], capture_output=True, text=True, timeout=30)` termina com `returncode == 0`, `stdout == filepilot.__version__ + "\n"` e `stderr == ""`.
+2. Em processo, sem interface: `sys.argv` trocado por `["filepilot", "--version"]`; `app_main.QApplication`, `app_main.default_data_dir` e `app_main.open_main_window` trocados por funcoes que levantam `AssertionError`; `app_main.main()` devolve `0` e `capsys.readouterr().out == filepilot.__version__ + "\n"`.
+3. Caminho de hoje preservado: com `sys.argv` igual a `["filepilot"]` e, em outro caso, a `["filepilot", "--version", "x"]`, `app_main.QApplication` trocado por um falso com `setApplicationName` e `app_main.open_main_window` por um falso que devolve `0`: `main()` devolve `0`, o falso da `QApplication` foi criado uma vez e o de `open_main_window` chamado uma vez; nada impresso na saida padrao.
+4. Gate do item, fora do pytest: `python -m mypy --platform win32 filepilot tests` com saida 0 e `Success: no issues found` (19.2 com 45.7), e a suite inteira (`pytest`) passando.
+5. Sem saida padrao: `sys.argv` igual a `["filepilot", "--version"]`, `sys.stdout` trocado por `None` com `monkeypatch` e os mesmos falsos que levantam do teste 2: `app_main.main()` devolve `0` sem excecao `[DECISAO: aprovada no enriquecimento; sugestao 1]`.
+
+### 54.3 Pendencias para decisao
+
+Nenhuma pendencia para decisao.
+
+### 54.4 Traceability Matrix
+
+| Item do escopo | Elementos da SPEC | Status | Origem |
+|---|---|---|---|
+| `python -m filepilot --version` imprime o `__version__` de `filepilot/__init__.py` na saida padrao | 54.2 (desvio em `main()`; testes 1 e 2) | coberto | discovery-notes.md |
+| O comando sai com codigo 0 e nao abre a interface grafica | 54.2 (sem `QApplication`, trava, banco nem janela; testes 1 e 2) | coberto | discovery-notes.md |
+| Fora de escopo: outros argumentos (`-V`, `--help`) | 54.1; 54.2 (comparacao exata; teste 3) | coberto | discovery-notes.md |
+| Fora de escopo: mudar o valor ou a fonte da versao | 54.1 | coberto | discovery-notes.md |
+| Fora de escopo: a versao nao aparece na janela do aplicativo | 54.1 | coberto | discovery-notes.md |
+| Fora de escopo: sem argumento o aplicativo abre como hoje | 54.2 (teste 3) | coberto | discovery-notes.md |
+| Metrica: `--version` imprime a versao e sai com 0, sem janela | 54.2 (teste 1) | coberto | discovery-notes.md |
+| Plataforma: inalterada, Windows 10 e 11 em 64 bits (13, 17.3); testes tambem no Linux | 54.2 (teste 1 sem dependencia de plataforma) | coberto | discovery-notes.md (stack inalterada) |
+| - | 54.1 executavel do PyInstaller sem saida de versao | - | `[DECISAO: o pedido cobre so python -m filepilot; o executavel sem console nao tem saida padrao]` |
+| - | 54.2 comparacao exata de `sys.argv[1:]` com `["--version"]` | - | `[DECISAO: comparacao exata de sys.argv[1:]; qualquer outra lista de argumentos, inclusive --version com mais argumentos, segue o caminho de hoje]` |
+| - | 54.2 sem saida padrao, `main()` devolve 0 sem excecao (teste 5) | - | `[DECISAO: aprovada no enriquecimento; sugestao 1]` |
+| - | 54.2 sem parser de argumentos | - | `[DECISAO: um parser recusaria argumentos que o Qt aceita hoje pela QApplication(sys.argv), mudando o comportamento sem argumento de versao]` |
