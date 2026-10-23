@@ -6,6 +6,7 @@ from pathlib import Path
 from PySide6.QtCore import QLockFile, QStandardPaths
 from PySide6.QtWidgets import QApplication, QMessageBox
 
+from filepilot import __version__
 from filepilot.domain.errors import FilePilotError
 from filepilot.ui.main_window import MainWindow
 
@@ -60,6 +61,9 @@ def open_main_window(data_dir: Path) -> MainWindow | int:
 
 
 def main() -> int:
+    if sys.argv[1:] == ["--version"]:
+        print(__version__)
+        return 0
     app = QApplication(sys.argv)
     app.setApplicationName("FilePilot")
     result = open_main_window(default_data_dir())
