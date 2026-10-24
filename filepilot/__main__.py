@@ -22,6 +22,12 @@ _LOCK_UNAVAILABLE = (
     "Não foi possível verificar se o FilePilot já está aberto. "
     "Confira se você tem permissão para usar a pasta de dados do aplicativo."
 )
+_USAGE: str = (
+    "uso: python -m filepilot [--help | -h | --version]\n"
+    "opções:\n"
+    "  --help, -h  mostra esta ajuda e sai\n"
+    "  --version   mostra a versão e sai"
+)
 
 
 def default_data_dir() -> Path:
@@ -63,6 +69,9 @@ def open_main_window(data_dir: Path) -> MainWindow | int:
 def main() -> int:
     if sys.argv[1:] == ["--version"]:
         print(__version__)
+        return 0
+    if sys.argv[1:] in (["--help"], ["-h"]):
+        print(_USAGE)
         return 0
     app = QApplication(sys.argv)
     app.setApplicationName("FilePilot")
