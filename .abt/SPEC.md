@@ -1554,3 +1554,85 @@ Nenhuma pendencia para decisao.
 ## §55 Opcao --version imprime a versao e sai sem abrir a janela
 
 Item: filepilot-version-1 (filepilot-2)
+
+## 56. Opcao --help na linha de comando [DELTA 2026-10-24, python -m filepilot --help]
+
+### 56.1 Objetivo e fora de escopo
+
+`python -m filepilot --help` e `python -m filepilot -h`, cada um como argumento unico, imprimem o texto de uso do FilePilot na saida padrao e saem com codigo 0, sem abrir a interface grafica. Hoje `main()` (`filepilot/__main__.py:63` a `:73`) so desvia com o argumento unico `--version` (54.2); `--help` e `-h` seguem para a `QApplication` e abrem a janela. Personas: Ana e Carlos (1), que usam o FilePilot pela linha de comando (54.1).
+
+Fora de escopo:
+
+- `-V` e outros argumentos de linha de comando; NAO cria parser de argumentos (mesmo motivo de 54.2).
+- Mudar o comportamento do `--version` de 54.2: o desvio e os testes de `tests/test_version_cli.py` ficam como estao.
+- O texto de uso NAO aparece na janela do aplicativo (titulo, abas e dialogos de 7.1 ficam como estao).
+- O executavel do PyInstaller (§44, sem console) nao ganha saida visivel de uso, pelo mesmo motivo de 54.1.
+
+Sem dados, servicos novos, interface nova nem permissoes: so o ponto de entrada muda.
+
+### 56.2 Ajuda deixa de ser fora de escopo {acrescenta: 54.1}
+
+Errata da secao 56: `--help` e `-h`, cada um como argumento unico, deixam de ser fora de escopo e imprimem o texto de uso (56.3). `-V` e os demais argumentos continuam fora de escopo, sem parser de argumentos.
+
+### 56.3 Ponto de entrada com --help e -h
+
+Acrescenta ao ponto de entrada de 7.1 (`filepilot/__main__.py`) um segundo desvio antes da `QApplication`, logo depois do desvio de `--version` de 54.2.
+
+- Novo: constante de modulo `_USAGE: str` em `filepilot/__main__.py`, com exatamente as quatro linhas abaixo, sem quebra de linha no fim da ultima (o `print` a acrescenta) `[DECISAO: a linha "opções:" e o alinhamento das descricoes sao forma escolhida aqui; o pedido fixa a primeira linha, o portugues e uma linha por opcao]`:
+
+```text
+uso: python -m filepilot [--help | -h | --version]
+opções:
+  --help, -h  mostra esta ajuda e sai
+  --version   mostra a versão e sai
+```
+
+- `--help` e `-h` sao a mesma opcao e dividem uma linha `[DECISAO: -h e o nome curto de --help; uma linha por opcao conta as duas como uma opcao]`. Cada linha de opcao comeca com dois espacos; entre `--help, -h` e a descricao ha dois espacos, e entre `--version` e a descricao, tres (descricoes alinhadas na mesma coluna).
+- Logo depois do desvio de `--version` de 54.2, `main()` ganha:
+
+```python
+if sys.argv[1:] in (["--help"], ["-h"]):
+    print(_USAGE)
+    return 0
+```
+
+- Saida: exatamente `_USAGE` seguido de uma quebra de linha na saida padrao, nada na saida de erro, codigo de saida 0 (pelo `sys.exit(main())` de `filepilot/__main__.py:76` e `:77`, que nao muda).
+- Sem saida padrao (`pythonw -m filepilot --help`, `sys.stdout` igual a `None`): `main()` devolve 0 sem excecao e sem nada na saida de erro, pela mesma regra de 54.2 (a escrita fica no `print`, nunca em `sys.stdout.write`).
+- Saida padrao que nao codifica `ã` e `õ` (como `PYTHONIOENCODING=ascii`): o `print` levanta `UnicodeEncodeError`, o Python mostra o traceback na saida de erro e sai com 1. E limite aceito, sem tratamento nem teste: consoles e pipes do Windows (cp1252) e do Linux (UTF-8) codificam as duas letras `[DECISAO: aprovada no enriquecimento; sugestao 1]`.
+- Nesse caminho `main()` NAO cria `QApplication`, NAO chama `default_data_dir()` nem `open_main_window()`: nao cria a pasta de dados, nao toma a trava `filepilot.lock`, nao abre o banco e nao mostra janela nem `QMessageBox`.
+- So os argumentos unicos `--help` e `-h` desviam, por comparacao exata de `sys.argv[1:]` (como 54.2): qualquer outra lista de argumentos, inclusive `--help` ou `-h` com mais argumentos e grafias como `-H` ou `--HELP`, segue o caminho de hoje e abre a janela.
+- Nao muda: o desvio de `--version` de 54.2, as importacoes do topo de `__main__.py`, o caminho sem argumento de desvio, `open_main_window`, `MainWindow` e o docstring do modulo. `main()` continua `def main() -> int:` sem parametros.
+
+### 56.4 Testes do ponto de entrada com --help
+
+Arquivo novo `tests/test_help_cli.py`, no estilo de `tests/test_version_cli.py` (toda fixture com `yield` segue a regra de `Iterator` de 45.7). O texto esperado e o literal das quatro linhas de 56.3 escrito no teste, nao lido de `_USAGE`, mais a quebra de linha final.
+
+1. Subprocesso real, parametrizado com `--help` e `-h`: `subprocess.run([sys.executable, "-m", "filepilot", <arg>], capture_output=True, text=True, timeout=30)` termina com `returncode == 0`, `stdout` igual ao texto esperado e `stderr == ""`.
+2. Em processo, sem interface, parametrizado com `--help` e `-h`: `sys.argv` trocado por `["filepilot", <arg>]`; `app_main.QApplication`, `app_main.default_data_dir` e `app_main.open_main_window` trocados por funcoes que levantam `AssertionError`; `app_main.main()` devolve `0` e `capsys.readouterr().out` e igual ao texto esperado.
+3. Caminho de hoje preservado, parametrizado com `["filepilot", "--help", "x"]`, `["filepilot", "-h", "--version"]` e `["filepilot", "-H"]`: `app_main.QApplication` trocado por um falso com `setApplicationName` e `app_main.open_main_window` por um falso que devolve `0`; `main()` devolve `0`, o falso da `QApplication` foi criado uma vez e o de `open_main_window` chamado uma vez; nada impresso na saida padrao.
+4. Sem saida padrao, parametrizado com `--help` e `-h`: `sys.stdout` trocado por `None` com `monkeypatch` e os mesmos falsos que levantam do teste 2: `app_main.main()` devolve `0` sem excecao.
+5. Gate do item, fora do pytest: `python -m mypy --platform win32 filepilot tests` com saida 0 e `Success: no issues found` (19.2 com 45.7), e a suite inteira (`pytest`) passando, inclusive `tests/test_version_cli.py` sem mudanca.
+
+### 56.5 Pendencias para decisao
+
+Nenhuma pendencia para decisao.
+
+### 56.6 Traceability Matrix
+
+| Item do escopo | Elementos da SPEC | Status | Origem |
+|---|---|---|---|
+| `python -m filepilot --help`, argumento unico, imprime o uso e sai com 0 sem abrir a janela | 56.3 (desvio em `main()`); 56.4 (testes 1 e 2) | coberto | discovery-notes.md |
+| `-h`, argumento unico, faz o mesmo que `--help` | 56.3; 56.4 (testes 1 e 2, parametrizados) | coberto | discovery-notes.md |
+| Texto de uso em portugues, terminando com nova linha, com `uso: python -m filepilot [--help \| -h \| --version]` e uma linha por opcao | 56.3 (`_USAGE` e `print`); 56.4 (texto literal nos testes 1 e 2) | coberto | discovery-notes.md |
+| Qualquer outra combinacao de argumentos segue abrindo a janela; sem parser | 56.3 (comparacao exata); 56.4 (teste 3) | coberto | discovery-notes.md |
+| Sem saida padrao (`pythonw`): devolve 0 sem excecao, como o `--version` | 56.3; 56.4 (teste 4) | coberto | discovery-notes.md |
+| Fora de escopo: `-V` e outros argumentos | 56.1; 56.2 | coberto | discovery-notes.md |
+| Fora de escopo: mudar o `--version` de 54.2 | 56.1; 56.4 (teste 5, `tests/test_version_cli.py` sem mudanca) | coberto | discovery-notes.md |
+| Fora de escopo: uso na janela do aplicativo | 56.1 | coberto | discovery-notes.md |
+| Fora de escopo: uso no executavel do PyInstaller | 56.1 | coberto | discovery-notes.md |
+| Metrica: `--help` e `-h` imprimem o uso e saem com 0, sem janela | 56.4 (teste 1) | coberto | discovery-notes.md |
+| Plataforma: inalterada, Windows 10 e 11 em 64 bits (13, 17.3); testes tambem no Linux | 56.4 (teste 1 sem dependencia de plataforma) | coberto | discovery-notes.md (stack inalterada) |
+| - | 56.2 errata de 54.1: `--help` e `-h` deixam de ser fora de escopo | - | discovery-notes.md (escopo desta secao) |
+| - | 56.3 linha `opções:` e alinhamento das descricoes | - | `[DECISAO: a linha "opções:" e o alinhamento das descricoes sao forma escolhida aqui; o pedido fixa a primeira linha, o portugues e uma linha por opcao]` |
+| - | 56.3 `--help` e `-h` na mesma linha de opcao | - | `[DECISAO: -h e o nome curto de --help; uma linha por opcao conta as duas como uma opcao]` |
+| - | 56.3 saida padrao que nao codifica `ã` e `õ` sai com 1, limite aceito sem teste | - | `[DECISAO: aprovada no enriquecimento; sugestao 1]` |
