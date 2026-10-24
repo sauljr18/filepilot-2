@@ -1636,3 +1636,7 @@ Nenhuma pendencia para decisao.
 | - | 56.3 linha `opções:` e alinhamento das descricoes | - | `[DECISAO: a linha "opções:" e o alinhamento das descricoes sao forma escolhida aqui; o pedido fixa a primeira linha, o portugues e uma linha por opcao]` |
 | - | 56.3 `--help` e `-h` na mesma linha de opcao | - | `[DECISAO: -h e o nome curto de --help; uma linha por opcao conta as duas como uma opcao]` |
 | - | 56.3 saida padrao que nao codifica `ã` e `õ` sai com 1, limite aceito sem teste | - | `[DECISAO: aprovada no enriquecimento; sugestao 1]` |
+
+## §57 Opcao --help e -h imprimem o uso e saem sem abrir a janela
+
+Item: filepilot-help-1 (filepilot-2)
