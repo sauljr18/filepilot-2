@@ -1738,3 +1738,7 @@ Nenhuma pendencia para decisao.
 | - | 58.4 `-v` e `--V` seguem abrindo a janela | - | `[DECISAO: mesma regra de comparacao exata de 54.2; o pedido cobre -V como argumento unico]` |
 | - | 58.5 `--version, -V` na mesma linha de opcao | - | `[DECISAO: mesma forma da linha --help, -h; uma linha por opcao conta o nome longo e o curto como uma opcao]` |
 | - | 58.5 descricoes alinhadas na mesma coluna | - | `[DECISAO: o alinhamento de 56.3 mantido com o nome mais longo]` |
+
+## §59 Opcao -V imprime a versao e aparece na ajuda
+
+Item: filepilot-opcao-v-1 (filepilot-2)
