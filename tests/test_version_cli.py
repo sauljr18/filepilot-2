@@ -36,9 +36,10 @@ def _forbid_interface(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(app_main, "open_main_window", _forbidden)
 
 
-def test_version_em_subprocesso_imprime_a_versao() -> None:
+@pytest.mark.parametrize("arg", ["--version", "-V"], ids=["longo", "curto"])
+def test_version_em_subprocesso_imprime_a_versao(arg: str) -> None:
     completed = subprocess.run(
-        [sys.executable, "-m", "filepilot", "--version"],
+        [sys.executable, "-m", "filepilot", arg],
         capture_output=True,
         text=True,
         timeout=30,
@@ -49,10 +50,11 @@ def test_version_em_subprocesso_imprime_a_versao() -> None:
     assert completed.stderr == ""
 
 
+@pytest.mark.parametrize("arg", ["--version", "-V"], ids=["longo", "curto"])
 def test_version_em_processo_nao_abre_a_interface(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], arg: str
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["filepilot", "--version"])
+    monkeypatch.setattr(sys, "argv", ["filepilot", arg])
     _forbid_interface(monkeypatch)
 
     assert app_main.main() == 0
@@ -60,7 +62,14 @@ def test_version_em_processo_nao_abre_a_interface(
 
 
 @pytest.mark.parametrize(
-    "argv", [["filepilot"], ["filepilot", "--version", "x"]], ids=["sem", "extra"]
+    "argv",
+    [
+        ["filepilot"],
+        ["filepilot", "--version", "x"],
+        ["filepilot", "-V", "x"],
+        ["filepilot", "-v"],
+    ],
+    ids=["sem", "extra", "curto-extra", "minuscula"],
 )
 def test_outros_argumentos_seguem_o_caminho_de_hoje(
     monkeypatch: pytest.MonkeyPatch,
@@ -79,10 +88,11 @@ def test_outros_argumentos_seguem_o_caminho_de_hoje(
     assert capsys.readouterr().out == ""
 
 
+@pytest.mark.parametrize("arg", ["--version", "-V"], ids=["longo", "curto"])
 def test_version_sem_saida_padrao_devolve_zero(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, arg: str
 ) -> None:
-    monkeypatch.setattr(sys, "argv", ["filepilot", "--version"])
+    monkeypatch.setattr(sys, "argv", ["filepilot", arg])
     monkeypatch.setattr(sys, "stdout", None)
     _forbid_interface(monkeypatch)
 
