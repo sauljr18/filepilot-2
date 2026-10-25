@@ -6,10 +6,10 @@ import pytest
 from filepilot import __main__ as app_main
 
 EXPECTED_USAGE = (
-    "uso: python -m filepilot [--help | -h | --version]\n"
+    "uso: python -m filepilot [--help | -h | --version | -V]\n"
     "opções:\n"
-    "  --help, -h  mostra esta ajuda e sai\n"
-    "  --version   mostra a versão e sai\n"
+    "  --help, -h     mostra esta ajuda e sai\n"
+    "  --version, -V  mostra a versão e sai\n"
 )
 
 

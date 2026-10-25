@@ -23,10 +23,10 @@ _LOCK_UNAVAILABLE = (
     "Confira se você tem permissão para usar a pasta de dados do aplicativo."
 )
 _USAGE: str = (
-    "uso: python -m filepilot [--help | -h | --version]\n"
+    "uso: python -m filepilot [--help | -h | --version | -V]\n"
     "opções:\n"
-    "  --help, -h  mostra esta ajuda e sai\n"
-    "  --version   mostra a versão e sai"
+    "  --help, -h     mostra esta ajuda e sai\n"
+    "  --version, -V  mostra a versão e sai"
 )
 
 
@@ -67,7 +67,7 @@ def open_main_window(data_dir: Path) -> MainWindow | int:
 
 
 def main() -> int:
-    if sys.argv[1:] == ["--version"]:
+    if sys.argv[1:] in (["--version"], ["-V"]):
         print(__version__)
         return 0
     if sys.argv[1:] in (["--help"], ["-h"]):
