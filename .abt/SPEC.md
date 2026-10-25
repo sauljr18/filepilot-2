@@ -1640,3 +1640,101 @@ Nenhuma pendencia para decisao.
 ## §57 Opcao --help e -h imprimem o uso e saem sem abrir a janela
 
 Item: filepilot-help-1 (filepilot-2)
+
+## 58. Opcao -V na linha de comando [DELTA 2026-10-25, python -m filepilot -V]
+
+### 58.1 Objetivo e fora de escopo
+
+`python -m filepilot -V`, como argumento unico, faz o mesmo que `python -m filepilot --version` (54.2): imprime a versao do FilePilot (o `__version__` de `filepilot/__init__.py:3`, hoje `"0.1.0"`) e sai com codigo 0, sem abrir a interface grafica. O texto de uso do `--help` e do `-h` (56.3) passa a citar `-V` junto do `--version`. Hoje `main()` (`filepilot/__main__.py:69` a `:82`) so desvia com o argumento unico `--version` (`:70`) e com `--help` ou `-h` (`:73`); `-V` segue para a `QApplication` e abre a janela. Personas: Ana e Carlos (1), que usam o FilePilot pela linha de comando (54.1, 56.1).
+
+Fora de escopo:
+
+- `-V` com outros argumentos (como `-V x`) e grafias como `-v`: seguem o caminho de hoje e abrem a janela, como o `--version` com argumentos extras (54.2).
+- Parser de argumentos (mesmo motivo de 54.2).
+- Versao no executavel do PyInstaller (§44, sem console, 54.1) e na janela do aplicativo.
+- Mudar o valor ou a fonte da versao (`filepilot/__init__.py` e `pyproject.toml:7` nao mudam), a saida do `--version` e o comportamento do `--help` e do `-h` fora do texto de uso.
+
+Sem dados, servicos novos, interface nova nem permissoes: so o ponto de entrada muda.
+
+### 58.2 -V deixa de ser fora de escopo da secao 54 {acrescenta: 54.1}
+
+Errata da secao 58: `-V`, como argumento unico, deixa de ser fora de escopo e imprime a versao como o `--version` (58.4). Os demais argumentos continuam fora de escopo, sem parser de argumentos.
+
+### 58.3 -V deixa de ser fora de escopo da secao 56 {acrescenta: 56.1}
+
+Errata da secao 58: `-V`, como argumento unico, deixa de ser fora de escopo (58.4), e o texto de uso passa a cita-lo (56.3, substituida por 58.5). A saida do `--version` nao muda; o desvio de 54.2 passa a aceitar tambem `-V` (58.4), e `tests/test_version_cli.py` ganha os casos de `-V` (58.6).
+
+### 58.4 Desvio de versao aceita -V {acrescenta: 54.2}
+
+Errata da secao 58: o desvio de versao de `main()` aceita `--version` e `-V`, cada um como argumento unico. A condicao do bloco acima passa a ser:
+
+```python
+if sys.argv[1:] in (["--version"], ["-V"]):
+    print(__version__)
+    return 0
+```
+
+- `-V` tem exatamente a saida, o codigo de saida e o caminho sem interface do `--version` descritos acima, inclusive sem saida padrao (`pythonw`).
+- Comparacao exata de `sys.argv[1:]`: `-V` com mais argumentos, `-v` e `--V` seguem o caminho de hoje e abrem a janela `[DECISAO: mesma regra de comparacao exata de 54.2; o pedido cobre -V como argumento unico]`.
+- O desvio de versao continua antes do desvio de ajuda de 56.3, e `main()` continua `def main() -> int:` sem parametros.
+
+### 58.5 Ponto de entrada com --help e -h {substitui: 56.3}
+
+Acrescenta ao ponto de entrada de 7.1 (`filepilot/__main__.py`) um segundo desvio antes da `QApplication`, logo depois do desvio de versao de 54.2 (com `-V`, 58.4).
+
+- Constante de modulo `_USAGE: str` em `filepilot/__main__.py` (`:25`), com exatamente as quatro linhas abaixo, sem quebra de linha no fim da ultima (o `print` a acrescenta):
+
+```text
+uso: python -m filepilot [--help | -h | --version | -V]
+opções:
+  --help, -h     mostra esta ajuda e sai
+  --version, -V  mostra a versão e sai
+```
+
+- `--help` e `-h` dividem uma linha, e `--version` e `-V` outra: o nome curto vem depois do longo, separado por `, ` `[DECISAO: mesma forma da linha --help, -h; uma linha por opcao conta o nome longo e o curto como uma opcao]`. Cada linha de opcao comeca com dois espacos; entre `--help, -h` e a descricao ha cinco espacos, e entre `--version, -V` e a descricao, dois (descricoes alinhadas na mesma coluna) `[DECISAO: o alinhamento de 56.3 mantido com o nome mais longo]`.
+- Logo depois do desvio de versao, `main()` tem:
+
+```python
+if sys.argv[1:] in (["--help"], ["-h"]):
+    print(_USAGE)
+    return 0
+```
+
+- Saida: exatamente `_USAGE` seguido de uma quebra de linha na saida padrao, nada na saida de erro, codigo de saida 0 (pelo `sys.exit(main())` de `filepilot/__main__.py:85` e `:86`, que nao muda).
+- Sem saida padrao (`pythonw -m filepilot --help`, `sys.stdout` igual a `None`): `main()` devolve 0 sem excecao e sem nada na saida de erro, pela mesma regra de 54.2 (a escrita fica no `print`, nunca em `sys.stdout.write`).
+- Saida padrao que nao codifica `ã` e `õ` (como `PYTHONIOENCODING=ascii`): o `print` levanta `UnicodeEncodeError`, o Python mostra o traceback na saida de erro e sai com 1. E limite aceito, sem tratamento nem teste: consoles e pipes do Windows (cp1252) e do Linux (UTF-8) codificam as duas letras `[DECISAO: aprovada no enriquecimento; sugestao 1]`.
+- Nesse caminho `main()` NAO cria `QApplication`, NAO chama `default_data_dir()` nem `open_main_window()`: nao cria a pasta de dados, nao toma a trava `filepilot.lock`, nao abre o banco e nao mostra janela nem `QMessageBox`.
+- So os argumentos unicos `--help` e `-h` desviam, por comparacao exata de `sys.argv[1:]` (como 54.2): qualquer outra lista de argumentos, inclusive `--help` ou `-h` com mais argumentos e grafias como `-H` ou `--HELP`, segue o caminho de hoje e abre a janela.
+- Nao muda: as importacoes do topo de `__main__.py`, o caminho sem argumento de desvio, `open_main_window`, `MainWindow` e o docstring do modulo. `main()` continua `def main() -> int:` sem parametros.
+
+### 58.6 Testes do -V e do texto de uso
+
+Em `tests/test_version_cli.py` (estilo atual; toda fixture com `yield` segue a regra de `Iterator` de 45.7):
+
+1. Os testes 1, 2 e 5 de 54.2 (`test_version_em_subprocesso_imprime_a_versao`, `test_version_em_processo_nao_abre_a_interface` e `test_version_sem_saida_padrao_devolve_zero`) passam a ser parametrizados com `--version` e `-V` (`ids=["longo", "curto"]`, como em `tests/test_help_cli.py`), com as mesmas verificacoes para os dois.
+2. O teste 3 de 54.2 (`test_outros_argumentos_seguem_o_caminho_de_hoje`) ganha os casos `["filepilot", "-V", "x"]` e `["filepilot", "-v"]` (ids `curto-extra` e `minuscula`, depois de `sem` e `extra`), com as mesmas verificacoes (uma `QApplication`, uma chamada de `open_main_window`, nada na saida padrao).
+
+Em `tests/test_help_cli.py`: `EXPECTED_USAGE` passa a ser o literal das quatro linhas de 58.5 mais a quebra de linha final, escrito no teste, nao lido de `_USAGE`; os demais testes de 56.4 nao mudam.
+
+Gate do item, fora do pytest: `python -m mypy --platform win32 filepilot tests` com saida 0 e `Success: no issues found` (19.2 com 45.7), e a suite inteira (`pytest`) passando.
+
+### 58.7 Pendencias para decisao
+
+Nenhuma pendencia para decisao.
+
+### 58.8 Traceability Matrix
+
+| Item do escopo | Elementos da SPEC | Status | Origem |
+|---|---|---|---|
+| `python -m filepilot -V`, argumento unico, imprime a versao e sai com 0, sem abrir a janela, com a mesma saida do `--version` | 58.4 (desvio com `-V`); 58.6 (testes 1, 2 e 5 parametrizados) | coberto | discovery-notes.md |
+| O texto do `--help` e do `-h` cita `-V` junto do `--version`, e o teste do `--help` acompanha | 58.5 (`_USAGE`); 58.6 (`EXPECTED_USAGE` em `tests/test_help_cli.py`) | coberto | discovery-notes.md |
+| Fora de escopo: `-V` com outros argumentos segue o caminho de hoje | 58.1; 58.4 (comparacao exata); 58.6 (teste 3, caso `-V x`) | coberto | discovery-notes.md |
+| Fora de escopo: parser de argumentos | 58.1; 58.4 | coberto | discovery-notes.md |
+| Fora de escopo: versao no executavel do PyInstaller e na janela | 58.1 | coberto | discovery-notes.md |
+| Fora de escopo: mudar o valor ou a fonte da versao, a saida do `--version` e o `--help`/`-h` fora do texto de uso | 58.1; 58.4; 58.5 | coberto | discovery-notes.md |
+| Metrica: `-V` imprime a mesma saida do `--version`, sai com 0 e nao abre janela | 58.6 (testes 1 e 2 parametrizados) | coberto | discovery-notes.md |
+| Plataforma: inalterada, Windows 10 e 11 em 64 bits (13, 17.3); testes tambem no Linux | 58.6 (teste 1 sem dependencia de plataforma) | coberto | discovery-notes.md (stack inalterada) |
+| - | 58.2 e 58.3 errata de 54.1 e 56.1: `-V` deixa de ser fora de escopo | - | discovery-notes.md (escopo desta secao) |
+| - | 58.4 `-v` e `--V` seguem abrindo a janela | - | `[DECISAO: mesma regra de comparacao exata de 54.2; o pedido cobre -V como argumento unico]` |
+| - | 58.5 `--version, -V` na mesma linha de opcao | - | `[DECISAO: mesma forma da linha --help, -h; uma linha por opcao conta o nome longo e o curto como uma opcao]` |
+| - | 58.5 descricoes alinhadas na mesma coluna | - | `[DECISAO: o alinhamento de 56.3 mantido com o nome mais longo]` |
