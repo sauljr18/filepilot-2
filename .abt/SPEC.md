@@ -1742,3 +1742,43 @@ Nenhuma pendencia para decisao.
 ## §59 Opcao -V imprime a versao e aparece na ajuda
 
 Item: filepilot-opcao-v-1 (filepilot-2)
+
+## 60. Arquivo de prova do smoke 74e [DELTA 2026-10-26, rascunho/74e-prova.md]
+
+### 60.1 Objetivo e fora de escopo
+
+Cria o arquivo `rascunho/74e-prova.md` na raiz do repositorio, com uma unica linha de texto (60.2). E uma prova descartavel do smoke 74e: o item que a entrega so precisa chegar a solicitacao de mesclagem aberta, com esse arquivo como unica mudanca no diff. Hoje o repositorio nao tem a pasta `rascunho/` (raiz: `filepilot/`, `packaging/`, `tests/`, `pyproject.toml`). Persona: Saul (admin do abt), que roda o smoke 74e (discovery-notes.md).
+
+Fora de escopo:
+
+- Codigo de qualquer tipo: nenhum arquivo de `filepilot/` nem de `packaging/` muda.
+- Testes: nenhum arquivo de `tests/` muda e nenhum teste novo e criado.
+- Mudanca em qualquer outro arquivo do repositorio, inclusive `pyproject.toml`, `.github/` e `.gitignore`.
+
+Sem dados, servicos, interface nem permissoes: so um arquivo Markdown novo.
+
+### 60.2 Arquivo rascunho/74e-prova.md
+
+- Caminho: `rascunho/74e-prova.md`, relativo a raiz do repositorio; a pasta `rascunho/` nasce com ele.
+- Conteudo: exatamente a linha `prova do smoke 74e`, seguida de uma quebra de linha `\n` e nada mais (19 bytes, UTF-8, sem BOM) `[DECISAO: arquivo de texto termina em quebra de linha, como os demais do repositorio; uma linha so, como no pedido]`.
+- O arquivo nao e lido por nenhum codigo: `pyproject.toml:23` empacota so `filepilot*`, e o `mypy` do CI (`.github/workflows/tests.yml:22`) confere so `filepilot` e `tests`. `pytest` e `mypy` continuam com o resultado de hoje.
+- Verificacao objetiva: `git diff --name-only origin/main...HEAD` na branch do item lista so `rascunho/74e-prova.md`, e `git show HEAD:rascunho/74e-prova.md | cmp - <(printf 'prova do smoke 74e\n')` sai com 0.
+- A verificacao do conteudo vale para o arquivo versionado, nao para a copia de trabalho: o repositorio nao tem `.gitattributes`, e num checkout no Windows com `core.autocrlf=true` a copia de trabalho fica com CRLF. A quebra de linha versionada e LF. Nenhum `.gitattributes` e criado (fora de escopo, 60.1) `[DECISAO: aprovada no enriquecimento; sugestao 1]`.
+
+### 60.3 Pendencias para decisao
+
+Nenhuma pendencia para decisao.
+
+### 60.4 Traceability Matrix
+
+| Item do escopo | Elementos da SPEC | Status | Origem |
+|---|---|---|---|
+| Item `zz-74e-descartavel` cria `rascunho/74e-prova.md` com a linha `prova do smoke 74e` | 60.2 (caminho e conteudo) | coberto | discovery-notes.md |
+| Fora de escopo: codigo de qualquer tipo | 60.1 | coberto | discovery-notes.md |
+| Fora de escopo: testes | 60.1 | coberto | discovery-notes.md |
+| Fora de escopo: mudanca em qualquer outro arquivo | 60.1; 60.2 (verificacao pelo diff) | coberto | discovery-notes.md |
+| Metrica: solicitacao de mesclagem do item aberta com so rascunho/74e-prova.md no diff | 60.2 (verificacao pelo diff) | coberto | discovery-notes.md |
+| Metrica: conteudo do arquivo e exatamente uma linha, `prova do smoke 74e` | 60.2 (conteudo e `cmp`) | coberto | discovery-notes.md |
+| Plataforma: inalterada (a do `pyproject.toml` e de `.abt/RULES.md`); o arquivo nao depende de plataforma | 60.2 | coberto | discovery-notes.md (stack inalterada) |
+| - | 60.2 verificacao do conteudo pelo arquivo versionado, quebra de linha LF, sem `.gitattributes` | - | `[DECISAO: aprovada no enriquecimento; sugestao 1]` |
+| - | 60.2 quebra de linha final, 19 bytes, UTF-8 sem BOM | - | `[DECISAO: arquivo de texto termina em quebra de linha, como os demais do repositorio; uma linha so, como no pedido]` |
