@@ -1782,3 +1782,7 @@ Nenhuma pendencia para decisao.
 | Plataforma: inalterada (a do `pyproject.toml` e de `.abt/RULES.md`); o arquivo nao depende de plataforma | 60.2 | coberto | discovery-notes.md (stack inalterada) |
 | - | 60.2 verificacao do conteudo pelo arquivo versionado, quebra de linha LF, sem `.gitattributes` | - | `[DECISAO: aprovada no enriquecimento; sugestao 1]` |
 | - | 60.2 quebra de linha final, 19 bytes, UTF-8 sem BOM | - | `[DECISAO: arquivo de texto termina em quebra de linha, como os demais do repositorio; uma linha so, como no pedido]` |
+
+## §61 Arquivo de prova rascunho/74e-prova.md do smoke 74e
+
+Item: zz-74e-descartavel (filepilot-2)
